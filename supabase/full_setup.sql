@@ -1085,14 +1085,58 @@ values
   ('CH3','CH3',          'المحطة الكهربائية', 'محطة التحويل', 'م. سلطان القرني', 'ready');
 
 -- المعدات: مولدات
-insert into equipment (asset_id, name, type, building_id, manufacturer, model, serial_number, status, criticality)
-select 'GEN-'||building_number||'-01', 'مولد رئيسي '||name, 'generator', id, 'Perkins', 'P500-3', 'SN-GEN-'||building_number, 'standby', 'critical'
-from buildings where building_number in ('7','12','30','43','CH3');
+insert into equipment (
+  asset_id,
+  name,
+  type,
+  building_id,
+  manufacturer,
+  model,
+  serial_number,
+  status,
+  criticality
+)
+select
+  'GEN-' || building_number || '-01',
+  'مولد رئيسي ' || name,
+  'generator',
+  id,
+  'Perkins',
+  'P500-3',
+  'SN-GEN-' || building_number,
+  'standby',
+  'critical'
+from buildings
+where building_number in ('7', '12', '30', '43', 'CH3');
 
-insert into generators (equipment_id, generator_number, rated_power_kva, rated_power_kw, voltage, frequency,
-  number_of_phases, fuel_type, fuel_tank_capacity, running_hours, next_maintenance_date, generator_status)
-select e.id, 'G-'||b.building_number, 500, 400, 400, 50, 3, 'ديزل', 1000, 1240, current_date + 20, 'Standby'
-from equipment e join buildings b on b.id = e.building_id
+insert into generators (
+  equipment_id,
+  generator_number,
+  rated_power_kva,
+  rated_power_kw,
+  voltage,
+  frequency,
+  number_of_phases,
+  fuel_type,
+  fuel_tank_capacity,
+  running_hours,
+  next_maintenance_date
+)
+select
+  e.id,
+  'G-' || b.building_number,
+  500,
+  400,
+  400,
+  50,
+  3,
+  'ديزل',
+  1000,
+  1240,
+ current_date + 20
+from equipment e
+join buildings b
+  on b.id = e.building_id
 where e.type = 'generator';
 
 -- المعدات: ATS
