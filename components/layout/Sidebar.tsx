@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Building2, Cpu, ClipboardCheck, Wrench, AlertTriangle,
-  Package, FileText, BarChart3, Bell, Users, Settings, History, Zap,
+  Package, FileText, BarChart3, Bell, Users, Settings, History, Zap, Network,
 } from 'lucide-react';
 import type { UserRole } from '@/types/database.types';
 
@@ -12,6 +12,7 @@ const navItems = [
   { href: '/dashboard', label: 'لوحة التحكم', icon: LayoutDashboard, roles: ['admin', 'engineer', 'technician', 'viewer'] },
   { href: '/buildings', label: 'المباني', icon: Building2, roles: ['admin', 'engineer', 'technician', 'viewer'] },
   { href: '/equipment', label: 'المعدات', icon: Cpu, roles: ['admin', 'engineer', 'technician', 'viewer'] },
+  { href: '/mv-network', label: 'شبكة الجهد المتوسط', icon: Network, roles: ['admin', 'engineer', 'technician', 'viewer'] },
   { href: '/tests', label: 'الاختبارات', icon: ClipboardCheck, roles: ['admin', 'engineer', 'technician', 'viewer'] },
   { href: '/maintenance', label: 'الصيانة', icon: Wrench, roles: ['admin', 'engineer', 'technician', 'viewer'] },
   { href: '/faults', label: 'الأعطال', icon: AlertTriangle, roles: ['admin', 'engineer', 'technician', 'viewer'] },
