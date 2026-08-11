@@ -50,17 +50,14 @@ export default function EquipmentDetailsPage() {
       setBuildingName((eq as any).buildings?.name ?? '');
 
       const detailTables: Record<string, string> = {
-  generator: 'generators',
-  ats: 'ats_units',
-  ups: 'ups_units',
-  transformer: 'transformers',
-};
-
-const detailTable = detailTables[String(eq.type)];
-      if (detailTable) {
-        const { data: details } = await supabase.from(detailTable).select('*').eq('equipment_id', id).maybeSingle();
-        setTypeDetails(details);
-      }
+        generator: 'generators',
+        ats: 'ats_units',
+        ups: 'ups_units',
+        transformer: 'transformers',
+      };
+      const detailTable = detailTables[String(eq.type)] ?? 'equipment_specs';
+      const { data: details } = await supabase.from(detailTable).select('*').eq('equipment_id', id).maybeSingle();
+      setTypeDetails(details);
     }
     setBuildings(b ?? []);
     setTests(t ?? []);
@@ -141,11 +138,9 @@ const detailTable = detailTables[String(eq.type)];
           <h2 className="mb-4 font-bold text-gray-900">البيانات الفنية</h2>
           {typeDetails ? (
             <dl className="space-y-2.5 text-sm">
-              {Object.entries(typeDetails)
-                .filter(([key]) => key !== 'equipment_id')
-                .map(([key, value]) => (
-                  <Row key={key} label={key.replace(/_/g, ' ')} value={value?.toString()} />
-                ))}
+              {technicalRows(equipment.type, typeDetails).map(([key, label, value]) => (
+                <Row key={key} label={label} value={value} />
+              ))}
             </dl>
           ) : (
             <p className="py-6 text-center text-sm text-gray-400">
@@ -246,7 +241,7 @@ const detailTable = detailTables[String(eq.type)];
       </div>
 
       {showEdit && (
-        <EquipmentForm equipment={equipment} buildings={buildings} onClose={() => setShowEdit(false)} onSaved={load} />
+        <EquipmentForm equipment={equipment} buildings={buildings} typeDetails={typeDetails} onClose={() => setShowEdit(false)} onSaved={load} />
       )}
 
       <ConfirmDialog
@@ -268,4 +263,93 @@ function Row({ label, value }: { label: string; value?: string | null }) {
       <dd className="font-medium text-gray-800">{value || '—'}</dd>
     </div>
   );
+}
+
+
+function technicalRows(type: string, details: Record<string, any>): Array<[string, string, string]> {
+  const definitions: Record<string, Record<string, [string, string?]>> = {
+    generator: {
+      generator_number: ['رقم المولد'],
+      rated_power_kva: ['القدرة المقننة', 'kVA'],
+      rated_power_kw: ['القدرة الفعلية', 'kW'],
+      voltage: ['الجهد', 'V'],
+      frequency: ['التردد', 'Hz'],
+      number_of_phases: ['عدد الفازات'],
+      power_factor: ['معامل القدرة PF'],
+      running_hours: ['ساعات التشغيل', 'ساعة'],
+    },
+    transformer: {
+      transformer_number: ['رقم المحول'],
+      capacity_kva: ['القدرة', 'kVA'],
+      primary_voltage: ['جهد الابتدائي', 'V'],
+      secondary_voltage: ['جهد الثانوي', 'V'],
+      transformer_type: ['نوع المحول'],
+      cooling_type: ['نوع التبريد'],
+      vector_group: ['Vector Group'],
+      impedance: ['الممانعة', '%'],
+      current_load_percentage: ['الحمل الحالي', '%'],
+    },
+    ups: {
+      ups_number: ['رقم UPS'],
+      capacity_kva: ['القدرة', 'kVA'],
+      capacity_kw: ['القدرة', 'kW'],
+      input_voltage: ['جهد الدخول', 'V'],
+      output_voltage: ['جهد الخروج', 'V'],
+      number_of_phases: ['عدد الفازات'],
+      current_load_percentage: ['الحمل الحالي', '%'],
+      current_load_kva: ['الحمل الحالي', 'kVA'],
+      operating_mode: ['وضع التشغيل'],
+      battery_quantity: ['عدد البطاريات'],
+      battery_voltage: ['جهد البطارية', 'V'],
+      battery_capacity_ah: ['سعة البطارية', 'Ah'],
+    },
+    ats: {
+      ats_number: ['رقم ATS'],
+      rated_current: ['التيار المقنن', 'A'],
+      rated_voltage: ['الجهد المقنن', 'V'],
+      number_of_poles: ['عدد الأقطاب'],
+      transfer_delay: ['زمن التحويل', 'ث'],
+      return_delay: ['زمن الرجوع', 'ث'],
+      cool_down_time: ['زمن التبريد', 'ث'],
+    },
+  };
+
+  const genericByType: Record<string, Record<string, [string, string?]>> = {
+    switchgear: {
+      rated_voltage: ['الجهد المقنن', 'kV'], rated_current: ['التيار المقنن', 'A'], breaking_capacity_ka: ['قدرة القطع', 'kA'], number_of_phases: ['عدد الفازات'],
+    },
+    rmu: {
+      rated_voltage: ['الجهد المقنن', 'kV'], rated_current: ['التيار المقنن', 'A'], breaking_capacity_ka: ['قدرة القطع', 'kA'], number_of_phases: ['عدد الفازات'], ways_count: ['عدد الخلايا / Ways'],
+    },
+    main_distribution_board: {
+      rated_voltage: ['الجهد المقنن', 'V'], rated_current: ['تيار اللوحة', 'A'], rated_power_kva: ['القدرة', 'kVA'], number_of_phases: ['عدد الفازات'], ways_count: ['عدد الدوائر / Ways'],
+    },
+    sub_main_distribution_board: {
+      rated_voltage: ['الجهد المقنن', 'V'], rated_current: ['تيار اللوحة', 'A'], rated_power_kva: ['القدرة', 'kVA'], number_of_phases: ['عدد الفازات'], ways_count: ['عدد الدوائر / Ways'],
+    },
+    synchronizing_panel: {
+      rated_voltage: ['الجهد المقنن', 'V'], rated_current: ['التيار المقنن', 'A'], frequency: ['التردد', 'Hz'], number_of_phases: ['عدد الفازات'], generator_count: ['عدد المولدات المرتبطة'],
+    },
+    battery_bank: {
+      battery_voltage: ['جهد البطارية / البنك', 'V'], battery_capacity_ah: ['السعة', 'Ah'], battery_quantity: ['عدد البطاريات'],
+    },
+    pdu: {
+      rated_voltage: ['الجهد المقنن', 'V'], rated_current: ['التيار المقنن', 'A'], rated_power_kva: ['القدرة', 'kVA'], number_of_phases: ['عدد الفازات'],
+    },
+    pdm: {
+      rated_voltage: ['الجهد المقنن', 'V'], rated_current: ['التيار المقنن', 'A'], rated_power_kva: ['القدرة', 'kVA'], number_of_phases: ['عدد الفازات'],
+    },
+    other: {
+      rated_power_kva: ['القدرة', 'kVA'], rated_power_kw: ['القدرة', 'kW'], rated_voltage: ['الجهد', 'V'], rated_current: ['التيار', 'A'], frequency: ['التردد', 'Hz'], number_of_phases: ['عدد الفازات'],
+    },
+  };
+
+  const defs = definitions[type] ?? genericByType[type] ?? genericByType.other;
+  return Object.entries(defs)
+    .filter(([key]) => details[key] !== null && details[key] !== undefined && details[key] !== '')
+    .map(([key, [label, unit]]) => {
+      let value: any = details[key];
+      if ((type === 'switchgear' || type === 'rmu') && key === 'rated_voltage') value = Number(value) / 1000;
+      return [key, label, `${value}${unit ? ` ${unit}` : ''}`];
+    });
 }
