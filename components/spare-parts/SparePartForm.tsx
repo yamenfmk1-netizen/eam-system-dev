@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import toast from 'react-hot-toast';
 import { EQUIPMENT_TYPE_LABELS } from '@/types/database.types';
 import type { SparePart } from '@/types/database.types';
+import { warrantyStatus, warrantyDaysLeft } from '@/types/database.types';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { sparePartSchema, type SparePartInput } from '@/lib/validation/schemas';
 import { validateFile, ALLOWED_IMAGE_TYPES, MAX_IMAGE_SIZE_BYTES, FileValidationError } from '@/lib/storage/upload';
@@ -26,7 +27,7 @@ export default function SparePartForm({
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
 
-  const { register, handleSubmit, formState: { errors } } = useForm<SparePartInput>({
+  const { register, handleSubmit, watch, formState: { errors } } = useForm<SparePartInput>({
     resolver: zodResolver(sparePartSchema),
     defaultValues: sparePart
       ? {
@@ -39,9 +40,19 @@ export default function SparePartForm({
           storage_location: sparePart.storage_location ?? '',
           supplier: sparePart.supplier ?? '',
           price: sparePart.price?.toString() ?? '',
+          purchase_date: sparePart.purchase_date ?? '',
+          expiry_date: sparePart.expiry_date ?? '',
+          warranty_start_date: sparePart.warranty_start_date ?? '',
+          warranty_end_date: sparePart.warranty_end_date ?? '',
+          warranty_provider: sparePart.warranty_provider ?? '',
+          notes: sparePart.notes ?? '',
         }
       : { quantity_available: 0, minimum_stock: 0 },
   });
+
+  const warrantyEnd = watch('warranty_end_date');
+  const warrantyState = warrantyStatus(warrantyEnd || null);
+  const warrantyDays = warrantyDaysLeft(warrantyEnd || null);
 
   function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] ?? null;
@@ -78,6 +89,9 @@ export default function SparePartForm({
         price: values.price ? Number(values.price) : null,
         purchase_date: values.purchase_date || null,
         expiry_date: values.expiry_date || null,
+        warranty_start_date: values.warranty_start_date || null,
+        warranty_end_date: values.warranty_end_date || null,
+        warranty_provider: values.warranty_provider || null,
         notes: values.notes || null,
       };
       if (image_url) payload.image_url = image_url;
@@ -169,6 +183,34 @@ export default function SparePartForm({
           <div>
             <label className="label-field">تاريخ الانتهاء (إن وجد)</label>
             <input {...register('expiry_date')} type="date" className="input-field" />
+          </div>
+
+          <div className="sm:col-span-2 rounded-xl border border-gray-200 bg-gray-50 p-4">
+            <p className="mb-3 text-sm font-semibold text-gray-800">بيانات الضمان</p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div>
+                <label className="label-field">بداية الضمان</label>
+                <input {...register('warranty_start_date')} type="date" className="input-field" />
+              </div>
+              <div>
+                <label className="label-field">انتهاء الضمان</label>
+                <input {...register('warranty_end_date')} type="date" className="input-field" />
+                {errors.warranty_end_date && <p className="mt-1 text-xs text-red-600">{errors.warranty_end_date.message}</p>}
+              </div>
+              <div>
+                <label className="label-field">جهة الضمان</label>
+                <input {...register('warranty_provider')} className="input-field" placeholder="المورد أو الوكيل" />
+              </div>
+            </div>
+            {warrantyEnd && (
+              <p className={`mt-3 text-xs ${warrantyState === 'expired' ? 'text-red-600' : warrantyState === 'expiring_soon' ? 'text-amber-600' : 'text-emerald-600'}`}>
+                {warrantyState === 'expired'
+                  ? `الضمان منتهٍ منذ ${Math.abs(warrantyDays ?? 0)} يومًا`
+                  : warrantyState === 'expiring_soon'
+                    ? `ينتهي الضمان خلال ${warrantyDays} يومًا`
+                    : `الضمان ساري — متبقٍ ${warrantyDays} يومًا`}
+              </p>
+            )}
           </div>
 
           <div>
