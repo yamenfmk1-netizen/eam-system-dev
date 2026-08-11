@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Zap, Loader2, ShieldAlert } from 'lucide-react';
 import toast from 'react-hot-toast';
+import LanguageToggle from '@/components/layout/LanguageToggle';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -66,7 +67,8 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-primary-950 to-primary-800 px-4">
+    <div className="relative flex min-h-screen items-center justify-center bg-gradient-to-b from-primary-950 to-primary-800 px-4">
+      <div className="absolute end-4 top-4"><LanguageToggle /></div>
       <div className="w-full max-w-md">
         <div className="mb-8 flex flex-col items-center gap-3 text-white">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10">
