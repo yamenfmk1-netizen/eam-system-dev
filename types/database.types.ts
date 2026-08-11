@@ -129,6 +129,7 @@ export interface MaintenanceRecord {
   technician_name: string | null;
   engineer_name: string | null;
   next_maintenance_date: string | null;
+  schedule_id?: string | null;
 }
 
 export interface SparePart {
@@ -142,6 +143,65 @@ export interface SparePart {
   storage_location: string | null;
   supplier: string | null;
   price: number | null;
+  purchase_date?: string | null;
+  expiry_date?: string | null;
+  // الضمان (أضيفت في patch_2026_08_features.sql)
+  warranty_start_date?: string | null;
+  warranty_end_date?: string | null;
+  warranty_provider?: string | null;
+  notes?: string | null;
+}
+
+export type WarrantyStatus = 'none' | 'valid' | 'expiring_soon' | 'expired';
+
+/** يوم التنبيه المبكر قبل انتهاء الضمان — نفس القيمة المستخدمة في v_spare_parts_warranty */
+export const WARRANTY_WARNING_DAYS = 30;
+
+export function warrantyStatus(endDate: string | null | undefined): WarrantyStatus {
+  if (!endDate) return 'none';
+  const end = new Date(`${endDate}T00:00:00`);
+  if (Number.isNaN(end.getTime())) return 'none';
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const days = Math.round((end.getTime() - today.getTime()) / 86400000);
+  if (days < 0) return 'expired';
+  if (days <= WARRANTY_WARNING_DAYS) return 'expiring_soon';
+  return 'valid';
+}
+
+export function warrantyDaysLeft(endDate: string | null | undefined): number | null {
+  if (!endDate) return null;
+  const end = new Date(`${endDate}T00:00:00`);
+  if (Number.isNaN(end.getTime())) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((end.getTime() - today.getTime()) / 86400000);
+}
+
+export type ScheduleFrequency = 'days' | 'weekly' | 'monthly' | 'quarterly' | 'semiannual' | 'yearly';
+
+export interface MaintenanceSchedule {
+  id: string;
+  title: string;
+  building_id: string;
+  equipment_id: string | null;
+  category: 'preventive' | 'corrective';
+  maintenance_type: string | null;
+  work_description: string | null;
+  technician_name: string | null;
+  engineer_name: string | null;
+  frequency: ScheduleFrequency;
+  interval_count: number;
+  start_date: string;
+  end_date: string | null;
+  next_due_date: string;
+  last_generated_date: string | null;
+  number_prefix: string;
+  auto_generate: boolean;
+  is_active: boolean;
+  notes: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 // ترجمات عربية للعرض في الواجهة
