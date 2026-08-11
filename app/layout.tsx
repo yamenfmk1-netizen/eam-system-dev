@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Cairo } from 'next/font/google';
 import './globals.css';
 import { Toaster } from 'react-hot-toast';
+import { LanguageProvider } from '@/lib/i18n/context';
 
 const cairo = Cairo({
   subsets: ['arabic', 'latin'],
@@ -15,11 +16,15 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // اللغة الافتراضية عربية؛ LanguageProvider يعدّل lang/dir على <html> بعد التحميل
+  // حسب اختيار المستخدم المحفوظ. suppressHydrationWarning لأن السمتين تتغيران في العميل.
   return (
-    <html lang="ar" dir="rtl" className={cairo.variable}>
+    <html lang="ar" dir="rtl" className={cairo.variable} suppressHydrationWarning>
       <body className="font-cairo">
-        {children}
-        <Toaster position="top-center" toastOptions={{ duration: 3500 }} />
+        <LanguageProvider>
+          {children}
+          <Toaster position="top-center" toastOptions={{ duration: 3500 }} />
+        </LanguageProvider>
       </body>
     </html>
   );
