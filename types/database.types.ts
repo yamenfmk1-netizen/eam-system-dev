@@ -3,6 +3,7 @@
 export type UserRole = 'admin' | 'engineer' | 'technician' | 'viewer';
 
 export type BuildingStatus = 'ready' | 'watch' | 'fault' | 'unknown';
+export type BuildingCriticality = 'normal' | 'critical';
 
 export type EquipmentType =
   | 'generator' | 'ats' | 'ups' | 'transformer' | 'switchgear' | 'rmu'
@@ -46,6 +47,7 @@ export interface Building {
   contact_email: string | null;
   description: string | null;
   status: BuildingStatus;
+  criticality: BuildingCriticality;
   image_url: string | null;
   notes: string | null;
   created_at: string;
@@ -229,6 +231,11 @@ export const EQUIPMENT_STATUS_LABELS: Record<EquipmentStatus, string> = {
   under_maintenance: 'تحت الصيانة',
   fault: 'يوجد عطل',
   out_of_service: 'خارج الخدمة',
+};
+
+export const BUILDING_CRITICALITY_LABELS: Record<BuildingCriticality, string> = {
+  normal: 'عادي',
+  critical: 'حرج',
 };
 
 export const BUILDING_STATUS_LABELS: Record<BuildingStatus, string> = {

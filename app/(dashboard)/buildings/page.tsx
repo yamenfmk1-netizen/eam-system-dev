@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import BuildingCard from '@/components/buildings/BuildingCard';
 import BuildingForm from '@/components/buildings/BuildingForm';
-import { Plus, Search, Loader2, MapPin } from 'lucide-react';
-import type { Building, BuildingStatus } from '@/types/database.types';
+import { Plus, Search, Loader2, MapPin, ShieldAlert } from 'lucide-react';
+import type { Building, BuildingStatus, BuildingCriticality } from '@/types/database.types';
 
 export default function BuildingsPage() {
   const supabase = createClient();
@@ -14,6 +14,7 @@ export default function BuildingsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<BuildingStatus | 'all'>('all');
   const [stationFilter, setStationFilter] = useState('all');
+  const [criticalityFilter, setCriticalityFilter] = useState<BuildingCriticality | 'all'>('all');
   const [showForm, setShowForm] = useState(false);
 
   async function loadBuildings() {
@@ -49,7 +50,14 @@ export default function BuildingsPage() {
       (b.station ?? '').toLowerCase().includes(q);
     const matchesStatus = statusFilter === 'all' || b.status === statusFilter;
     const matchesStation = stationFilter === 'all' || b.station === stationFilter;
-    return matchesSearch && matchesStatus && matchesStation;
+    const matchesCriticality = criticalityFilter === 'all' || b.criticality === criticalityFilter;
+    return matchesSearch && matchesStatus && matchesStation && matchesCriticality;
+  });
+
+  const sortedFiltered = [...filtered].sort((a, b) => {
+    if (a.criticality === 'critical' && b.criticality !== 'critical') return -1;
+    if (a.criticality !== 'critical' && b.criticality === 'critical') return 1;
+    return a.building_number.localeCompare(b.building_number, 'ar', { numeric: true });
   });
 
   return (
@@ -87,6 +95,18 @@ export default function BuildingsPage() {
             ))}
           </select>
         </div>
+        <div className="relative sm:w-44">
+          <ShieldAlert className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <select
+            value={criticalityFilter}
+            onChange={(e) => setCriticalityFilter(e.target.value as BuildingCriticality | 'all')}
+            className="input-field pe-9"
+          >
+            <option value="all">كل مستويات الأهمية</option>
+            <option value="critical">حرج</option>
+            <option value="normal">عادي</option>
+          </select>
+        </div>
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as any)}
@@ -104,11 +124,11 @@ export default function BuildingsPage() {
         <div className="flex justify-center py-20 text-gray-400">
           <Loader2 className="h-6 w-6 animate-spin" />
         </div>
-      ) : filtered.length === 0 ? (
+      ) : sortedFiltered.length === 0 ? (
         <div className="card py-16 text-center text-sm text-gray-400">لا توجد مبانٍ مطابقة</div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {filtered.map((b) => (
+          {sortedFiltered.map((b) => (
             <BuildingCard key={b.id} building={b} />
           ))}
         </div>

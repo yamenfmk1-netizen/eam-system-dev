@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Building2, Cpu, ClipboardCheck, Wrench, MapPin } from 'lucide-react';
+import { Building2, Cpu, ClipboardCheck, Wrench, MapPin, ShieldAlert } from 'lucide-react';
 import StatusBadge from '@/components/ui/StatusBadge';
 import { BUILDING_STATUS_LABELS } from '@/types/database.types';
 import type { Building } from '@/types/database.types';
@@ -7,11 +7,18 @@ import type { Building } from '@/types/database.types';
 export default function BuildingCard({ building }: { building: Building }) {
   return (
     <Link href={`/buildings/${building.id}`} className="card block transition hover:shadow-lg">
-      <div className="mb-3 flex items-start justify-between">
+      <div className="mb-3 flex items-start justify-between gap-2">
         <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
           <Building2 className="h-5 w-5" />
         </div>
-        <StatusBadge label={BUILDING_STATUS_LABELS[building.status]} tone={building.status} />
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
+          {building.criticality === 'critical' && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-1 text-xs font-semibold text-red-700">
+              <ShieldAlert className="h-3.5 w-3.5" /> حرج
+            </span>
+          )}
+          <StatusBadge label={BUILDING_STATUS_LABELS[building.status]} tone={building.status} />
+        </div>
       </div>
 
       <h3 className="font-bold text-gray-900">{building.name}</h3>

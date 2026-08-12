@@ -7,7 +7,7 @@ import StatusBadge from '@/components/ui/StatusBadge';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import BuildingForm from '@/components/buildings/BuildingForm';
 import {
-  ArrowRight, Pencil, Trash2, Phone, Mail, MapPin, User, Loader2,
+  ArrowRight, Pencil, Trash2, Phone, Mail, MapPin, User, Loader2, ShieldAlert,
 } from 'lucide-react';
 import {
   BUILDING_STATUS_LABELS, EQUIPMENT_TYPE_LABELS, EQUIPMENT_STATUS_LABELS,
@@ -115,6 +115,11 @@ export default function BuildingDetailsPage() {
         <div>
           <div className="mb-1.5 flex items-center gap-2">
             <h1 className="text-xl font-bold text-gray-900">{building.name}</h1>
+            {building.criticality === 'critical' && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-1 text-xs font-semibold text-red-700">
+                <ShieldAlert className="h-3.5 w-3.5" /> مبنى حرج
+              </span>
+            )}
             <StatusBadge label={BUILDING_STATUS_LABELS[building.status]} tone={building.status} />
           </div>
           <p className="text-sm text-gray-500">مبنى رقم {building.building_number} · {building.department}</p>

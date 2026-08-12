@@ -41,9 +41,10 @@ export default function BuildingForm({
           contact_email: building.contact_email ?? '',
           description: building.description ?? '',
           status: building.status,
+          criticality: building.criticality ?? 'normal',
           notes: building.notes ?? '',
         }
-      : { status: 'unknown', station: 'الحرم الرئيسي' },
+      : { status: 'unknown', station: 'الحرم الرئيسي', criticality: 'normal' },
   });
 
   function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -169,6 +170,15 @@ export default function BuildingForm({
               <option value="fault">يوجد عطل</option>
               <option value="unknown">بيانات غير كافية</option>
             </select>
+          </div>
+
+          <div>
+            <label className="label-field">أهمية المبنى *</label>
+            <select {...register('criticality')} className="input-field">
+              <option value="normal">عادي</option>
+              <option value="critical">حرج</option>
+            </select>
+            <p className="mt-1 text-xs text-gray-400">استخدم «حرج» للمباني التي تؤثر أعطالها مباشرة على التشغيل أو الخدمات الأساسية.</p>
           </div>
 
           <div className="sm:col-span-2">

@@ -33,6 +33,7 @@ export const buildingSchema = z.object({
   contact_email: z.string().trim().email('بريد إلكتروني غير صالح').optional().or(z.literal('')),
   description: z.string().trim().max(2000).optional().or(z.literal('')),
   status: z.enum(['ready', 'watch', 'fault', 'unknown']),
+  criticality: z.enum(['normal', 'critical']),
   notes: z.string().trim().max(2000).optional().or(z.literal('')),
 });
 
