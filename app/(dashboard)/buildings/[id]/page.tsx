@@ -119,6 +119,7 @@ export default function BuildingDetailsPage() {
           </div>
           <p className="text-sm text-gray-500">مبنى رقم {building.building_number} · {building.department}</p>
           <div className="mt-3 flex flex-wrap gap-4 text-xs text-gray-500">
+            <span className="flex items-center gap-1 font-medium text-gray-600"><MapPin className="h-3.5 w-3.5" />{building.station || 'غير محدد'}</span>
             {building.location && <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{building.location}</span>}
             {building.responsible_person && <span className="flex items-center gap-1"><User className="h-3.5 w-3.5" />{building.responsible_person}</span>}
             {building.contact_phone && <span className="flex items-center gap-1" dir="ltr"><Phone className="h-3.5 w-3.5" />{building.contact_phone}</span>}
@@ -334,7 +335,7 @@ export default function BuildingDetailsPage() {
       </div>
 
       {showEdit && (
-        <BuildingForm building={building} onClose={() => setShowEdit(false)} onSaved={load} />
+        <BuildingForm building={building} stations={[building.station || 'الحرم الرئيسي']} onClose={() => setShowEdit(false)} onSaved={load} />
       )}
 
       <ConfirmDialog

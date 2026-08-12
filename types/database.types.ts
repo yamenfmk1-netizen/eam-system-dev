@@ -38,6 +38,7 @@ export interface Building {
   name: string;
   department: string | null;
   location: string | null;
+  station: string;
   latitude: number | null;
   longitude: number | null;
   responsible_person: string | null;

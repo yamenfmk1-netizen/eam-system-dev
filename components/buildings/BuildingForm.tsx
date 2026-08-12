@@ -13,10 +13,12 @@ import { uploadFile } from '@/lib/storage/client';
 
 export default function BuildingForm({
   building,
+  stations,
   onClose,
   onSaved,
 }: {
   building?: Building;
+  stations?: string[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -33,6 +35,7 @@ export default function BuildingForm({
           name: building.name,
           department: building.department ?? '',
           location: building.location ?? '',
+          station: building.station ?? 'الحرم الرئيسي',
           responsible_person: building.responsible_person ?? '',
           contact_phone: building.contact_phone ?? '',
           contact_email: building.contact_email ?? '',
@@ -40,7 +43,7 @@ export default function BuildingForm({
           status: building.status,
           notes: building.notes ?? '',
         }
-      : { status: 'unknown' },
+      : { status: 'unknown', station: 'الحرم الرئيسي' },
   });
 
   function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -122,8 +125,24 @@ export default function BuildingForm({
           </div>
 
           <div>
-            <label className="label-field">الموقع</label>
-            <input {...register('location')} className="input-field" />
+            <label className="label-field">المحطة / الموقع *</label>
+            <input
+              {...register('station')}
+              list="building-stations"
+              placeholder="مثال: الحرم الرئيسي أو محطة جدة"
+              className="input-field"
+            />
+            <datalist id="building-stations">
+              {(stations ?? []).map((station) => (
+                <option key={station} value={station} />
+              ))}
+            </datalist>
+            {errors.station && <p className="mt-1 text-xs text-red-600">{errors.station.message}</p>}
+          </div>
+
+          <div>
+            <label className="label-field">الموقع التفصيلي</label>
+            <input {...register('location')} placeholder="مثال: المنطقة الشرقية من المحطة" className="input-field" />
           </div>
 
           <div>

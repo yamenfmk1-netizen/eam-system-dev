@@ -70,7 +70,7 @@ export default function EquipmentForm({
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
 
-  const { register, handleSubmit, watch, formState: { errors } } = useForm<EquipmentInput>({
+  const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<EquipmentInput>({
     resolver: zodResolver(equipmentSchema),
     defaultValues: equipment
       ? {
@@ -97,6 +97,15 @@ export default function EquipmentForm({
   });
 
   const selectedType = (watch('type') || equipment?.type || 'generator') as EquipmentType;
+  const initialBuildingId = equipment?.building_id ?? defaultBuildingId ?? '';
+  const initialStation = buildings.find((b) => b.id === initialBuildingId)?.station ?? '';
+  const [selectedStation, setSelectedStation] = useState(initialStation);
+  const stationOptions = Array.from(new Set(buildings.map((b) => b.station).filter(Boolean))).sort((a, b) =>
+    a.localeCompare(b, 'ar')
+  );
+  const filteredBuildings = selectedStation
+    ? buildings.filter((b) => b.station === selectedStation)
+    : [];
   const [tech, setTech] = useState<TechState>(() => buildTechState(equipment?.type ?? 'generator', typeDetails));
   const previousType = useRef<EquipmentType>(selectedType);
 
@@ -290,13 +299,36 @@ export default function EquipmentForm({
             </div>
 
             <div>
+              <label className="label-field">المحطة / الموقع *</label>
+              <select
+                value={selectedStation}
+                onChange={(e) => {
+                  setSelectedStation(e.target.value);
+                  setValue('building_id', '', { shouldValidate: false, shouldDirty: true });
+                }}
+                className="input-field"
+              >
+                <option value="">اختر المحطة / الموقع</option>
+                {stationOptions.map((station) => (
+                  <option key={station} value={station}>{station}</option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-400">اختيار المحطة يفلتر قائمة المباني تلقائيًا.</p>
+            </div>
+
+            <div>
               <label className="label-field">المبنى *</label>
-              <select {...register('building_id', { required: true })} className="input-field">
-                <option value="">اختر المبنى</option>
-                {buildings.map((b) => (
+              <select
+                {...register('building_id', { required: true })}
+                className="input-field"
+                disabled={!selectedStation}
+              >
+                <option value="">{selectedStation ? 'اختر المبنى' : 'اختر المحطة أولًا'}</option>
+                {filteredBuildings.map((b) => (
                   <option key={b.id} value={b.id}>{b.name} (مبنى {b.building_number})</option>
                 ))}
               </select>
+              {errors.building_id && <p className="mt-1 text-xs text-red-600">{errors.building_id.message}</p>}
             </div>
 
             <div>

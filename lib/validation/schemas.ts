@@ -27,6 +27,7 @@ export const buildingSchema = z.object({
   name: z.string().trim().min(2, 'مطلوب').max(150),
   department: z.string().trim().max(150).optional().or(z.literal('')),
   location: z.string().trim().max(250).optional().or(z.literal('')),
+  station: z.string().trim().min(1, 'يجب اختيار المحطة / الموقع').max(120),
   responsible_person: z.string().trim().max(150).optional().or(z.literal('')),
   contact_phone: z.string().trim().max(20).optional().or(z.literal('')),
   contact_email: z.string().trim().email('بريد إلكتروني غير صالح').optional().or(z.literal('')),

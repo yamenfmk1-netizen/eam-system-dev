@@ -5,24 +5,25 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import EquipmentForm from '@/components/equipment/EquipmentForm';
 import StatusBadge from '@/components/ui/StatusBadge';
-import { Plus, Search, Loader2 } from 'lucide-react';
+import { Plus, Search, Loader2, MapPin } from 'lucide-react';
 import { EQUIPMENT_TYPE_LABELS, EQUIPMENT_STATUS_LABELS } from '@/types/database.types';
 import type { Building, Equipment, EquipmentType } from '@/types/database.types';
 
 export default function EquipmentPage() {
   const supabase = createClient();
-  const [equipment, setEquipment] = useState<(Equipment & { buildings: { name: string; building_number: string } })[]>([]);
+  const [equipment, setEquipment] = useState<(Equipment & { buildings: { name: string; building_number: string; station: string } })[]>([]);
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<EquipmentType | 'all'>('all');
+  const [stationFilter, setStationFilter] = useState('all');
   const [buildingFilter, setBuildingFilter] = useState('all');
   const [showForm, setShowForm] = useState(false);
 
   async function loadData() {
     setLoading(true);
     const [{ data: eq }, { data: b }] = await Promise.all([
-      supabase.from('equipment').select('*, buildings(name, building_number)').is('deleted_at', null).order('created_at', { ascending: false }),
+      supabase.from('equipment').select('*, buildings(name, building_number, station)').is('deleted_at', null).order('created_at', { ascending: false }),
       supabase.from('buildings').select('*').is('deleted_at', null).order('building_number'),
     ]);
     setEquipment((eq as any) ?? []);
@@ -34,16 +35,26 @@ export default function EquipmentPage() {
     loadData();
   }, []);
 
+  const stations = Array.from(new Set(buildings.map((b) => b.station).filter(Boolean))).sort((a, b) =>
+    a.localeCompare(b, 'ar')
+  );
+
+  const visibleBuildings = stationFilter === 'all'
+    ? buildings
+    : buildings.filter((b) => b.station === stationFilter);
+
   const filtered = equipment.filter((e) => {
     const q = search.toLowerCase();
     const matchesSearch =
       e.asset_id.toLowerCase().includes(q) ||
       e.name.toLowerCase().includes(q) ||
       (e.manufacturer ?? '').toLowerCase().includes(q) ||
-      (e.serial_number ?? '').toLowerCase().includes(q);
+      (e.serial_number ?? '').toLowerCase().includes(q) ||
+      (e.buildings?.station ?? '').toLowerCase().includes(q);
     const matchesType = typeFilter === 'all' || e.type === typeFilter;
+    const matchesStation = stationFilter === 'all' || e.buildings?.station === stationFilter;
     const matchesBuilding = buildingFilter === 'all' || e.building_id === buildingFilter;
-    return matchesSearch && matchesType && matchesBuilding;
+    return matchesSearch && matchesType && matchesStation && matchesBuilding;
   });
 
   return (
@@ -74,9 +85,25 @@ export default function EquipmentPage() {
             <option key={value} value={value}>{label}</option>
           ))}
         </select>
+        <div className="relative sm:w-52">
+          <MapPin className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <select
+            value={stationFilter}
+            onChange={(e) => {
+              setStationFilter(e.target.value);
+              setBuildingFilter('all');
+            }}
+            className="input-field pe-9"
+          >
+            <option value="all">جميع المحطات / المواقع</option>
+            {stations.map((station) => (
+              <option key={station} value={station}>{station}</option>
+            ))}
+          </select>
+        </div>
         <select value={buildingFilter} onChange={(e) => setBuildingFilter(e.target.value)} className="input-field sm:w-48">
           <option value="all">جميع المباني</option>
-          {buildings.map((b) => (
+          {visibleBuildings.map((b) => (
             <option key={b.id} value={b.id}>{b.name}</option>
           ))}
         </select>
@@ -94,6 +121,7 @@ export default function EquipmentPage() {
                 <th className="px-4 py-3">رقم الأصل</th>
                 <th className="px-4 py-3">الاسم</th>
                 <th className="px-4 py-3">النوع</th>
+                <th className="px-4 py-3">المحطة / الموقع</th>
                 <th className="px-4 py-3">المبنى</th>
                 <th className="px-4 py-3">الشركة المصنعة</th>
                 <th className="px-4 py-3">الحالة</th>
@@ -110,6 +138,7 @@ export default function EquipmentPage() {
                   </td>
                   <td className="px-4 py-3">{e.name}</td>
                   <td className="px-4 py-3 text-gray-500">{EQUIPMENT_TYPE_LABELS[e.type]}</td>
+                  <td className="px-4 py-3 text-gray-500">{e.buildings?.station ?? '—'}</td>
                   <td className="px-4 py-3 text-gray-500">{e.buildings?.name}</td>
                   <td className="px-4 py-3 text-gray-500">{e.manufacturer ?? '—'}</td>
                   <td className="px-4 py-3">

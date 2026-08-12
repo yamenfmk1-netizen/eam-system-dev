@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Building2, Cpu, ClipboardCheck, Wrench } from 'lucide-react';
+import { Building2, Cpu, ClipboardCheck, Wrench, MapPin } from 'lucide-react';
 import StatusBadge from '@/components/ui/StatusBadge';
 import { BUILDING_STATUS_LABELS } from '@/types/database.types';
 import type { Building } from '@/types/database.types';
@@ -15,7 +15,10 @@ export default function BuildingCard({ building }: { building: Building }) {
       </div>
 
       <h3 className="font-bold text-gray-900">{building.name}</h3>
-      <p className="mb-4 text-xs text-gray-400">مبنى رقم {building.building_number}</p>
+      <p className="text-xs text-gray-400">مبنى رقم {building.building_number}</p>
+      <p className="mb-4 mt-1 flex items-center gap-1 text-xs text-gray-500">
+        <MapPin className="h-3.5 w-3.5" /> {building.station || 'غير محدد'}
+      </p>
 
       <div className="grid grid-cols-3 gap-2 border-t border-gray-100 pt-3 text-center">
         <div>

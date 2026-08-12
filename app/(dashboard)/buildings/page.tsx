@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import BuildingCard from '@/components/buildings/BuildingCard';
 import BuildingForm from '@/components/buildings/BuildingForm';
-import { Plus, Search, Loader2 } from 'lucide-react';
+import { Plus, Search, Loader2, MapPin } from 'lucide-react';
 import type { Building, BuildingStatus } from '@/types/database.types';
 
 export default function BuildingsPage() {
@@ -13,6 +13,7 @@ export default function BuildingsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<BuildingStatus | 'all'>('all');
+  const [stationFilter, setStationFilter] = useState('all');
   const [showForm, setShowForm] = useState(false);
 
   async function loadBuildings() {
@@ -36,12 +37,19 @@ export default function BuildingsPage() {
     loadBuildings();
   }, []);
 
+  const stations = Array.from(new Set(buildings.map((b) => b.station).filter(Boolean))).sort((a, b) =>
+    a.localeCompare(b, 'ar')
+  );
+
   const filtered = buildings.filter((b) => {
+    const q = search.toLowerCase();
     const matchesSearch =
-      b.name.toLowerCase().includes(search.toLowerCase()) ||
-      b.building_number.toLowerCase().includes(search.toLowerCase());
+      b.name.toLowerCase().includes(q) ||
+      b.building_number.toLowerCase().includes(q) ||
+      (b.station ?? '').toLowerCase().includes(q);
     const matchesStatus = statusFilter === 'all' || b.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesStation = stationFilter === 'all' || b.station === stationFilter;
+    return matchesSearch && matchesStatus && matchesStation;
   });
 
   return (
@@ -65,6 +73,19 @@ export default function BuildingsPage() {
             placeholder="ابحث برقم المبنى أو الاسم..."
             className="input-field pe-9"
           />
+        </div>
+        <div className="relative sm:w-56">
+          <MapPin className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <select
+            value={stationFilter}
+            onChange={(e) => setStationFilter(e.target.value)}
+            className="input-field pe-9"
+          >
+            <option value="all">جميع المحطات / المواقع</option>
+            {stations.map((station) => (
+              <option key={station} value={station}>{station}</option>
+            ))}
+          </select>
         </div>
         <select
           value={statusFilter}
@@ -94,7 +115,7 @@ export default function BuildingsPage() {
       )}
 
       {showForm && (
-        <BuildingForm onClose={() => setShowForm(false)} onSaved={loadBuildings} />
+        <BuildingForm stations={stations} onClose={() => setShowForm(false)} onSaved={loadBuildings} />
       )}
     </div>
   );

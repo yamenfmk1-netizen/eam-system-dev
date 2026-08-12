@@ -23,6 +23,7 @@ export default function EquipmentDetailsPage() {
 
   const [equipment, setEquipment] = useState<Equipment | null>(null);
   const [buildingName, setBuildingName] = useState('');
+  const [stationName, setStationName] = useState('');
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [typeDetails, setTypeDetails] = useState<Record<string, any> | null>(null);
   const [tests, setTests] = useState<any[]>([]);
@@ -37,7 +38,7 @@ export default function EquipmentDetailsPage() {
   async function load() {
     setLoading(true);
     const [{ data: eq }, { data: b }, { data: t }, { data: m }, { data: f }, { data: att }] = await Promise.all([
-      supabase.from('equipment').select('*, buildings(name)').eq('id', id).single(),
+      supabase.from('equipment').select('*, buildings(name, station)').eq('id', id).single(),
       supabase.from('buildings').select('*').is('deleted_at', null).order('building_number'),
       supabase.from('tests').select('*').eq('equipment_id', id).order('test_date', { ascending: false }),
       supabase.from('maintenance_records').select('*').eq('equipment_id', id).order('maintenance_date', { ascending: false }),
@@ -48,6 +49,7 @@ export default function EquipmentDetailsPage() {
     if (eq) {
       setEquipment(eq);
       setBuildingName((eq as any).buildings?.name ?? '');
+      setStationName((eq as any).buildings?.station ?? '');
 
       const detailTables: Record<string, string> = {
         generator: 'generators',
@@ -111,7 +113,7 @@ export default function EquipmentDetailsPage() {
             />
           </div>
           <p className="text-sm text-gray-500">
-            {equipment.asset_id} · {EQUIPMENT_TYPE_LABELS[equipment.type]} · {buildingName}
+            {equipment.asset_id} · {EQUIPMENT_TYPE_LABELS[equipment.type]} · {stationName || 'غير محدد'} · {buildingName}
           </p>
         </div>
         <div className="flex gap-2">
@@ -129,6 +131,8 @@ export default function EquipmentDetailsPage() {
             <Row label="الرقم التسلسلي" value={equipment.serial_number} />
             <Row label="سنة التصنيع" value={equipment.manufacturing_year?.toString()} />
             <Row label="تاريخ التركيب" value={equipment.installation_date} />
+            <Row label="المحطة / الموقع" value={stationName} />
+            <Row label="المبنى" value={buildingName} />
             <Row label="الموقع داخل المبنى" value={equipment.location_in_building} />
             <Row label="ملاحظات" value={equipment.notes} />
           </dl>
