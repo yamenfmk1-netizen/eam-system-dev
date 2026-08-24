@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { DEPARTMENT_CODE } from '@/lib/site-config';
 import MaintenanceForm from '@/components/maintenance/MaintenanceForm';
 import ScheduleForm from '@/components/maintenance/ScheduleForm';
 import StatusBadge from '@/components/ui/StatusBadge';
@@ -44,19 +45,48 @@ export default function MaintenancePage() {
   const [busy, setBusy] = useState(false);
   const [generating, setGenerating] = useState(false);
 
-  async function loadData() {
-    setLoading(true);
-    const [{ data: m }, { data: s }, { data: b }] = await Promise.all([
-      supabase.from('maintenance_records').select('*, buildings(name), equipment(name, asset_id)').order('maintenance_date', { ascending: false }),
-      supabase.from('maintenance_schedules').select('*, buildings(name), equipment(name, asset_id)').order('next_due_date'),
-      supabase.from('buildings').select('*').is('deleted_at', null).order('building_number'),
-    ]);
-    setRecords(m ?? []);
-    setSchedules(s ?? []);
-    setBuildings((b ?? []) as Building[]);
+ async function loadData() {
+  setLoading(true);
+
+  const { data: department } = await supabase
+    .from('departments')
+    .select('id')
+    .eq('code', DEPARTMENT_CODE)
+    .single();
+
+  if (!department) {
+    setRecords([]);
+    setSchedules([]);
+    setBuildings([]);
     setLoading(false);
+    return;
   }
 
+  const [{ data: m }, { data: s }, { data: b }] = await Promise.all([
+    supabase
+      .from('maintenance_records')
+      .select('*, buildings(name), equipment(name, asset_id)')
+      .eq('department_id', department.id)
+      .order('maintenance_date', { ascending: false }),
+
+    supabase
+      .from('maintenance_schedules')
+      .select('*, buildings(name), equipment(name, asset_id)')
+      .eq('department_id', department.id)
+      .order('next_due_date'),
+
+    supabase
+      .from('buildings')
+      .select('*')
+      .is('deleted_at', null)
+      .order('building_number'),
+  ]);
+
+  setRecords(m ?? []);
+  setSchedules(s ?? []);
+  setBuildings((b ?? []) as Building[]);
+  setLoading(false);
+}
   useEffect(() => { loadData(); }, []);
 
   const filtered = records.filter((r) => {
