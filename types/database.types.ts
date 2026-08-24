@@ -5,10 +5,7 @@ export type UserRole = 'admin' | 'engineer' | 'technician' | 'viewer';
 export type BuildingStatus = 'ready' | 'watch' | 'fault' | 'unknown';
 export type BuildingCriticality = 'normal' | 'critical';
 
-export type EquipmentType =
-  | 'generator' | 'ats' | 'ups' | 'transformer' | 'switchgear' | 'rmu'
-  | 'main_distribution_board' | 'sub_main_distribution_board'
-  | 'synchronizing_panel' | 'battery_bank' | 'pdu' | 'pdm' | 'other';
+export type EquipmentType = string;
 
 export type EquipmentStatus =
   | 'available' | 'running' | 'standby' | 'under_maintenance' | 'fault' | 'out_of_service';
@@ -63,6 +60,8 @@ export interface Equipment {
   asset_id: string;
   name: string;
   type: EquipmentType;
+  department_id: string;
+  equipment_type_id: string;
   building_id: string;
   location_in_building: string | null;
   manufacturer: string | null;
