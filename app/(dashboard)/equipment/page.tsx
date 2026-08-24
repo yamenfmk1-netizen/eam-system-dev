@@ -39,31 +39,12 @@ export default function EquipmentPage() {
   if (!department) {
     setEquipment([]);
     setBuildings([]);
+    setEquipmentTypes([]);
     setLoading(false);
     return;
   }
 
   const [{ data: eq }, { data: b }, { data: types }] = await Promise.all([
-  supabase
-    .from('equipment')
-    .select('*, buildings(name, building_number, station)')
-    .eq('department_id', department.id)
-    .is('deleted_at', null)
-    .order('created_at', { ascending: false }),
-
-  supabase
-    .from('buildings')
-    .select('*')
-    .is('deleted_at', null)
-    .order('building_number'),
-
-  supabase
-    .from('equipment_types')
-    .select('id, code, name')
-    .eq('department_id', department.id)
-    .eq('is_active', true)
-    .order('name'),
-]);
     supabase
       .from('equipment')
       .select('*, buildings(name, building_number, station)')
@@ -76,11 +57,18 @@ export default function EquipmentPage() {
       .select('*')
       .is('deleted_at', null)
       .order('building_number'),
+
+    supabase
+      .from('equipment_types')
+      .select('id, code, name')
+      .eq('department_id', department.id)
+      .eq('is_active', true)
+      .order('name'),
   ]);
 
   setEquipment((eq as any) ?? []);
   setBuildings(b ?? []);
-  setEquipmentTypes((types ?? []) as EquipmentTypeOption[]);  
+  setEquipmentTypes((types ?? []) as EquipmentTypeOption[]);
   setLoading(false);
 }
 
@@ -191,13 +179,22 @@ export default function EquipmentPage() {
             <tbody>
               {filtered.map((e) => (
                 <tr key={e.id} className="border-b border-gray-50 hover:bg-gray-50">
-                  <td className="px-4 py-3 text-gray-500">
+<td className="px-4 py-3">
+  <Link
+    href={`/equipment/${e.id}`}
+    className="font-medium text-primary-600 hover:underline"
+  >
+    {e.asset_id}
+  </Link>
+</td>
+
+<td className="px-4 py-3">{e.name}</td>
+
+<td className="px-4 py-3 text-gray-500">
   {equipmentTypes.find((item) => item.code === e.type)?.name
     ?? EQUIPMENT_TYPE_LABELS[e.type]
     ?? e.type}
 </td>
-                  <td className="px-4 py-3">{e.name}</td>
-                  <td className="px-4 py-3 text-gray-500">{EQUIPMENT_TYPE_LABELS[e.type]}</td>
                   <td className="px-4 py-3 text-gray-500">{e.buildings?.station ?? '—'}</td>
                   <td className="px-4 py-3 text-gray-500">{e.buildings?.name}</td>
                   <td className="px-4 py-3 text-gray-500">{e.manufacturer ?? '—'}</td>
