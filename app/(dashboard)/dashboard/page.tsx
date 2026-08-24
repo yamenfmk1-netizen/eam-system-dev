@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { DEPARTMENT_CODE } from '@/lib/site-config';
 import StatCard from '@/components/ui/StatCard';
 import { EquipmentStatusChart, FaultPriorityChart } from '@/components/dashboard/DashboardCharts';
 import {
@@ -54,6 +55,20 @@ function remainingLabel(days: number) {
 
 export default async function DashboardPage() {
   const supabase = createClient();
+
+  // معرفة القسم الخاص بهذا الموقع
+  const { data: department } = await supabase
+    .from('departments')
+    .select('id')
+    .eq('code', DEPARTMENT_CODE)
+    .single();
+
+  if (!department) {
+    throw new Error(`Department not found: ${DEPARTMENT_CODE}`);
+  }
+
+  const departmentId = department.id;
+
   const todayDate = new Date();
   const today = dateOnly(todayDate);
   const in30 = new Date(todayDate);
@@ -72,39 +87,68 @@ export default async function DashboardPage() {
     { data: schedules },
     { data: maintenanceFallback },
   ] = await Promise.all([
-    supabase.from('buildings').select('*', { count: 'exact', head: true }).is('deleted_at', null),
-    supabase.from('equipment').select('id,status').eq('type', 'generator').is('deleted_at', null),
-    supabase.from('equipment').select('id,status').eq('type', 'ups').is('deleted_at', null),
+    supabase
+      .from('buildings')
+      .select('*', { count: 'exact', head: true })
+      .is('deleted_at', null),
+
+    supabase
+      .from('equipment')
+      .select('id,status')
+      .eq('type', 'generator')
+      .eq('department_id', departmentId)
+      .is('deleted_at', null),
+
+    supabase
+      .from('equipment')
+      .select('id,status')
+      .eq('type', 'ups')
+      .eq('department_id', departmentId)
+      .is('deleted_at', null),
+
     supabase
       .from('faults')
       .select('id,building_id,priority,status')
+      .eq('department_id', departmentId)
       .in('status', OPEN_FAULT_STATUSES),
-    supabase.from('equipment').select('status').is('deleted_at', null),
+
+    supabase
+      .from('equipment')
+      .select('status')
+      .eq('department_id', departmentId)
+      .is('deleted_at', null),
+
     supabase
       .from('buildings')
       .select('id,building_number,name,status')
       .is('deleted_at', null),
+
     supabase
       .from('spare_parts')
-      .select('id,quantity_available,minimum_stock,warranty_end_date'),
+      .select('id,quantity_available,minimum_stock,warranty_end_date')
+      .eq('department_id', departmentId),
+
     supabase
       .from('tests')
       .select('id,test_number,test_type,next_test_date,building_id,equipment_id,buildings(name,building_number),equipment(name,asset_id)')
+      .eq('department_id', departmentId)
       .not('next_test_date', 'is', null)
       .gte('next_test_date', today)
       .lte('next_test_date', in30Str)
       .order('next_test_date', { ascending: true })
       .limit(8),
-    // هذا الجدول موجود بعد تحديث الجدولة الدورية. لو لم يكن موجودًا، Supabase يرجع data=null بدون كسر الصفحة.
+
     supabase
       .from('maintenance_schedules')
       .select('id,building_id,next_due_date,is_active')
+      .eq('department_id', departmentId)
       .eq('is_active', true)
       .lt('next_due_date', today),
-    // احتياط للنسخ الأقدم: نستخدم مواعيد الصيانة القادمة المسجلة في سجلات الصيانة.
+
     supabase
       .from('maintenance_records')
       .select('id,building_id,next_maintenance_date')
+      .eq('department_id', departmentId)
       .not('next_maintenance_date', 'is', null)
       .lt('next_maintenance_date', today),
   ]);
