@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { X, Loader2, Zap } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { DEPARTMENT_CODE } from '@/lib/site-config';
 import toast from 'react-hot-toast';
 import { EQUIPMENT_TYPE_LABELS } from '@/types/database.types';
 import type { Building, Equipment, EquipmentType } from '@/types/database.types';
@@ -218,15 +219,25 @@ export default function EquipmentForm({
   async function onSubmit(values: EquipmentInput) {
     setLoading(true);
     try {
+            const { data: department, error: departmentError } = await supabase
+        .from('departments')
+        .select('id')
+        .eq('code', DEPARTMENT_CODE)
+        .single();
+
+      if (departmentError || !department) {
+        throw new Error('تعذر تحديد القسم');
+      }
       let image_url = equipment?.image_url ?? null;
       if (imageFile) image_url = await uploadFile('equipment-images', imageFile);
 
       const payload = {
-        ...values,
-        manufacturing_year: values.manufacturing_year ? Number(values.manufacturing_year) : null,
-        installation_date: values.installation_date || null,
-        image_url,
-      };
+  ...values,
+  department_id: department.id,
+  manufacturing_year: values.manufacturing_year ? Number(values.manufacturing_year) : null,
+  installation_date: values.installation_date || null,
+  image_url,
+};
 
       let equipmentId = equipment?.id;
 
