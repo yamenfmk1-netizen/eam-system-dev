@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { DEPARTMENT_CODE } from '@/lib/site-config';
 import FaultForm from '@/components/faults/FaultForm';
 import StatusBadge from '@/components/ui/StatusBadge';
 import { Plus, Search, Loader2 } from 'lucide-react';
@@ -28,16 +29,40 @@ export default function FaultsPage() {
     });
   }, []);
 
-  async function loadData() {
-    setLoading(true);
-    const [{ data: f }, { data: b }] = await Promise.all([
-      supabase.from('faults').select('*, buildings(name), equipment(name, asset_id)').order('reported_at', { ascending: false }),
-      supabase.from('buildings').select('*').is('deleted_at', null).order('building_number'),
-    ]);
-    setFaults(f ?? []);
-    setBuildings(b ?? []);
+async function loadData() {
+  setLoading(true);
+
+  const { data: department } = await supabase
+    .from('departments')
+    .select('id')
+    .eq('code', DEPARTMENT_CODE)
+    .single();
+
+  if (!department) {
+    setFaults([]);
+    setBuildings([]);
     setLoading(false);
+    return;
   }
+
+  const [{ data: f }, { data: b }] = await Promise.all([
+    supabase
+      .from('faults')
+      .select('*, buildings(name), equipment(name, asset_id)')
+      .eq('department_id', department.id)
+      .order('reported_at', { ascending: false }),
+
+    supabase
+      .from('buildings')
+      .select('*')
+      .is('deleted_at', null)
+      .order('building_number'),
+  ]);
+
+  setFaults(f ?? []);
+  setBuildings(b ?? []);
+  setLoading(false);
+}
 
   useEffect(() => { loadData(); }, []);
 
