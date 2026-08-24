@@ -9,6 +9,11 @@ import StatusBadge from '@/components/ui/StatusBadge';
 import { Plus, Search, Loader2, MapPin } from 'lucide-react';
 import { EQUIPMENT_TYPE_LABELS, EQUIPMENT_STATUS_LABELS } from '@/types/database.types';
 import type { Building, Equipment, EquipmentType } from '@/types/database.types';
+type EquipmentTypeOption = {
+  id: string;
+  code: string;
+  name: string;
+};
 
 export default function EquipmentPage() {
   const supabase = createClient();
@@ -16,9 +21,10 @@ export default function EquipmentPage() {
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState<EquipmentType | 'all'>('all');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
   const [stationFilter, setStationFilter] = useState('all');
   const [buildingFilter, setBuildingFilter] = useState('all');
+  const [equipmentTypes, setEquipmentTypes] = useState<EquipmentTypeOption[]>([]);
   const [showForm, setShowForm] = useState(false);
 
   async function loadData() {
@@ -37,7 +43,27 @@ export default function EquipmentPage() {
     return;
   }
 
-  const [{ data: eq }, { data: b }] = await Promise.all([
+  const [{ data: eq }, { data: b }, { data: types }] = await Promise.all([
+  supabase
+    .from('equipment')
+    .select('*, buildings(name, building_number, station)')
+    .eq('department_id', department.id)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false }),
+
+  supabase
+    .from('buildings')
+    .select('*')
+    .is('deleted_at', null)
+    .order('building_number'),
+
+  supabase
+    .from('equipment_types')
+    .select('id, code, name')
+    .eq('department_id', department.id)
+    .eq('is_active', true)
+    .order('name'),
+]);
     supabase
       .from('equipment')
       .select('*, buildings(name, building_number, station)')
@@ -54,6 +80,7 @@ export default function EquipmentPage() {
 
   setEquipment((eq as any) ?? []);
   setBuildings(b ?? []);
+  setEquipmentTypes((types ?? []) as EquipmentTypeOption[]);  
   setLoading(false);
 }
 
@@ -105,12 +132,19 @@ export default function EquipmentPage() {
             className="input-field pe-9"
           />
         </div>
-        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as any)} className="input-field sm:w-48">
-          <option value="all">جميع الأنواع</option>
-          {Object.entries(EQUIPMENT_TYPE_LABELS).map(([value, label]) => (
-            <option key={value} value={value}>{label}</option>
-          ))}
-        </select>
+        <select
+  value={typeFilter}
+  onChange={(e) => setTypeFilter(e.target.value)}
+  className="input-field sm:w-48"
+>
+  <option value="all">جميع الأنواع</option>
+
+  {equipmentTypes.map((item) => (
+    <option key={item.id} value={item.code}>
+      {item.name}
+    </option>
+  ))}
+</select>
         <div className="relative sm:w-52">
           <MapPin className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <select
@@ -157,11 +191,11 @@ export default function EquipmentPage() {
             <tbody>
               {filtered.map((e) => (
                 <tr key={e.id} className="border-b border-gray-50 hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    <Link href={`/equipment/${e.id}`} className="font-medium text-primary-600 hover:underline">
-                      {e.asset_id}
-                    </Link>
-                  </td>
+                  <td className="px-4 py-3 text-gray-500">
+  {equipmentTypes.find((item) => item.code === e.type)?.name
+    ?? EQUIPMENT_TYPE_LABELS[e.type]
+    ?? e.type}
+</td>
                   <td className="px-4 py-3">{e.name}</td>
                   <td className="px-4 py-3 text-gray-500">{EQUIPMENT_TYPE_LABELS[e.type]}</td>
                   <td className="px-4 py-3 text-gray-500">{e.buildings?.station ?? '—'}</td>
