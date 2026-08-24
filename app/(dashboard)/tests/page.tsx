@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { DEPARTMENT_CODE } from '@/lib/site-config';
 import TestForm from '@/components/tests/TestForm';
 import StatusBadge from '@/components/ui/StatusBadge';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
@@ -26,28 +27,54 @@ export default function TestsPage() {
   const [deleting, setDeleting] = useState(false);
   const [role, setRole] = useState<UserRole>('viewer');
 
-  async function loadData() {
-    setLoading(true);
+async function loadData() {
+  setLoading(true);
 
-    const { data: { user } } = await supabase.auth.getUser();
-    const profilePromise = user
-      ? supabase.from('profiles').select('role').eq('id', user.id).maybeSingle()
-      : Promise.resolve({ data: null } as any);
+  const { data: department } = await supabase
+    .from('departments')
+    .select('id')
+    .eq('code', DEPARTMENT_CODE)
+    .single();
 
-    const [{ data: t }, { data: b }, { data: profile }] = await Promise.all([
-      supabase
-        .from('tests')
-        .select('*, buildings(name), equipment(name, asset_id)')
-        .order('test_date', { ascending: false }),
-      supabase.from('buildings').select('*').is('deleted_at', null).order('building_number'),
-      profilePromise,
-    ]);
-
-    setTests(t ?? []);
-    setBuildings(b ?? []);
-    setRole((profile?.role as UserRole) ?? 'viewer');
+  if (!department) {
+    setTests([]);
+    setBuildings([]);
+    setRole('viewer');
     setLoading(false);
+    return;
   }
+
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const profilePromise = user
+    ? supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle()
+    : Promise.resolve({ data: null } as any);
+
+  const [{ data: t }, { data: b }, { data: profile }] = await Promise.all([
+    supabase
+      .from('tests')
+      .select('*, buildings(name), equipment(name, asset_id)')
+      .eq('department_id', department.id)
+      .order('test_date', { ascending: false }),
+
+    supabase
+      .from('buildings')
+      .select('*')
+      .is('deleted_at', null)
+      .order('building_number'),
+
+    profilePromise,
+  ]);
+
+  setTests(t ?? []);
+  setBuildings(b ?? []);
+  setRole((profile?.role as UserRole) ?? 'viewer');
+  setLoading(false);
+}
 
   useEffect(() => { loadData(); }, []);
 
