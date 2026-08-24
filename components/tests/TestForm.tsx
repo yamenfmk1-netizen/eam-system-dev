@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { X, Loader2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { DEPARTMENT_CODE } from '@/lib/site-config';
 import toast from 'react-hot-toast';
 import { TEST_TYPE_LABELS } from '@/types/database.types';
 import type { Building, Equipment, TestRecord } from '@/types/database.types';
@@ -124,22 +125,49 @@ export default function TestForm({
 
   const selectedBuilding = watch('building_id');
 
-  useEffect(() => {
+useEffect(() => {
+  async function loadEquipment() {
     if (!selectedBuilding) {
       setEquipment([]);
       return;
     }
-    supabase
+
+    const { data: department } = await supabase
+      .from('departments')
+      .select('id')
+      .eq('code', DEPARTMENT_CODE)
+      .single();
+
+    if (!department) {
+      setEquipment([]);
+      return;
+    }
+
+    const { data } = await supabase
       .from('equipment')
       .select('*')
       .eq('building_id', selectedBuilding)
-      .is('deleted_at', null)
-      .then(({ data }) => setEquipment(data ?? []));
-  }, [selectedBuilding]);
+      .eq('department_id', department.id)
+      .is('deleted_at', null);
+
+    setEquipment(data ?? []);
+  }
+
+  loadEquipment();
+}, [selectedBuilding]);
 
   async function onSubmit(values: FormValues) {
     setLoading(true);
     try {
+            const { data: department, error: departmentError } = await supabase
+        .from('departments')
+        .select('id')
+        .eq('code', DEPARTMENT_CODE)
+        .single();
+
+      if (departmentError || !department) {
+        throw new Error('تعذر تحديد القسم');
+      }
       let readings: Record<string, unknown> | null = null;
       if (values.readings_json.trim()) {
         try {
@@ -159,6 +187,7 @@ export default function TestForm({
       const toNullableBool = (value: string) => value === 'true' ? true : value === 'false' ? false : null;
 
       const payload: any = {
+        department_id: department.id,
         test_number: values.test_number.trim(),
         test_type: values.test_type,
         building_id: values.building_id,
