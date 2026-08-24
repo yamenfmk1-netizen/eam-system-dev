@@ -12,6 +12,11 @@ import { equipmentSchema, type EquipmentInput } from '@/lib/validation/schemas';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { validateFile, ALLOWED_IMAGE_TYPES, MAX_IMAGE_SIZE_BYTES, FileValidationError } from '@/lib/storage/upload';
 import { uploadFile } from '@/lib/storage/client';
+type EquipmentTypeOption = {
+  id: string;
+  code: string;
+  name: string;
+};
 
 type TechState = Record<string, string>;
 
@@ -70,6 +75,7 @@ export default function EquipmentForm({
   const [loading, setLoading] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
+  const [equipmentTypes, setEquipmentTypes] = useState<EquipmentTypeOption[]>([]);
 
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<EquipmentInput>({
     resolver: zodResolver(equipmentSchema),
@@ -96,6 +102,46 @@ export default function EquipmentForm({
           building_id: defaultBuildingId ?? '',
         },
   });
+  useEffect(() => {
+  async function loadEquipmentTypes() {
+    const { data: department } = await supabase
+      .from('departments')
+      .select('id')
+      .eq('code', DEPARTMENT_CODE)
+      .single();
+
+    if (!department) {
+      setEquipmentTypes([]);
+      return;
+    }
+
+    const { data: types } = await supabase
+      .from('equipment_types')
+      .select('id, code, name')
+      .eq('department_id', department.id)
+      .eq('is_active', true)
+      .order('name');
+
+    const availableTypes = (types ?? []) as EquipmentTypeOption[];
+    setEquipmentTypes(availableTypes);
+
+    if (!equipment && availableTypes.length > 0) {
+      const currentType = watch('type');
+
+      const currentTypeExists = availableTypes.some(
+        (item) => item.code === currentType
+      );
+
+      if (!currentTypeExists) {
+        setValue('type', availableTypes[0].code, {
+          shouldValidate: true,
+        });
+      }
+    }
+  }
+
+  loadEquipmentTypes();
+}, [equipment]);
 
   const selectedType = (watch('type') || equipment?.type || 'generator') as EquipmentType;
   const initialBuildingId = equipment?.building_id ?? defaultBuildingId ?? '';
@@ -300,14 +346,25 @@ export default function EquipmentForm({
               {errors.name && <p className="mt-1 text-xs text-red-600">{errors.name.message}</p>}
             </div>
 
-            <div>
-              <label className="label-field">نوع المعدة *</label>
-              <select {...register('type', { required: true })} className="input-field">
-                {Object.entries(EQUIPMENT_TYPE_LABELS).map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-            </div>
+           <div>
+  <label className="label-field">نوع المعدة *</label>
+
+  <select
+    {...register('type', { required: true })}
+    className="input-field"
+    disabled={equipmentTypes.length === 0}
+  >
+    {equipmentTypes.length === 0 ? (
+      <option value="">لا توجد أنواع معدات</option>
+    ) : (
+      equipmentTypes.map((item) => (
+        <option key={item.id} value={item.code}>
+          {item.name}
+        </option>
+      ))
+    )}
+  </select>
+</div>
 
             <div>
               <label className="label-field">المحطة / الموقع *</label>
@@ -392,7 +449,13 @@ export default function EquipmentForm({
             <div className="mb-4 flex items-center gap-2">
               <Zap className="h-4 w-4 text-primary-600" />
               <div>
-                <h3 className="font-bold text-gray-900">المواصفات الفنية — {EQUIPMENT_TYPE_LABELS[selectedType]}</h3>
+               <h3 className="font-bold text-gray-900">
+  المواصفات الفنية — {
+    equipmentTypes.find((item) => item.code === selectedType)?.name
+    ?? EQUIPMENT_TYPE_LABELS[selectedType]
+    ?? selectedType
+  }
+</h3>
                 <p className="text-xs text-gray-500">تتغير الحقول تلقائيًا حسب نوع الأصل.</p>
               </div>
             </div>
