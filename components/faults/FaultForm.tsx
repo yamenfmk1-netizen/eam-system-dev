@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { X, Loader2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { DEPARTMENT_CODE } from '@/lib/site-config';
 import toast from 'react-hot-toast';
 import type { Building, Equipment, Fault, ProfileDirectoryEntry } from '@/types/database.types';
 import { uploadFile } from '@/lib/storage/client';
@@ -69,10 +70,36 @@ export default function FaultForm({
   const selectedBuilding = watch('building_id');
   const selectedStatus = watch('status');
 
-  useEffect(() => {
-    if (!selectedBuilding) { setEquipment([]); return; }
-    supabase.from('equipment').select('*').eq('building_id', selectedBuilding).is('deleted_at', null).then(({ data }) => setEquipment(data ?? []));
-  }, [selectedBuilding]);
+ useEffect(() => {
+  async function loadEquipment() {
+    if (!selectedBuilding) {
+      setEquipment([]);
+      return;
+    }
+
+    const { data: department } = await supabase
+      .from('departments')
+      .select('id')
+      .eq('code', DEPARTMENT_CODE)
+      .single();
+
+    if (!department) {
+      setEquipment([]);
+      return;
+    }
+
+    const { data } = await supabase
+      .from('equipment')
+      .select('*')
+      .eq('building_id', selectedBuilding)
+      .eq('department_id', department.id)
+      .is('deleted_at', null);
+
+    setEquipment(data ?? []);
+  }
+
+  loadEquipment();
+}, [selectedBuilding]);
 
   // دليل المستخدمين المحدود (اسم + دور فقط، بدون بريد/جوال) لإسناد العطل
   // لمهندس أو فني — القراءة عبر profiles_directory وليس جدول profiles مباشرة،
@@ -85,7 +112,17 @@ export default function FaultForm({
   async function onSubmit(values: FormValues) {
     setLoading(true);
     try {
+            const { data: department, error: departmentError } = await supabase
+        .from('departments')
+        .select('id')
+        .eq('code', DEPARTMENT_CODE)
+        .single();
+
+      if (departmentError || !department) {
+        throw new Error('تعذر تحديد القسم');
+      }
       const payload: any = {
+        department_id: department.id,
         fault_number: values.fault_number,
         building_id: values.building_id,
         equipment_id: values.equipment_id || null,
