@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
+import { DEPARTMENT_CODE } from '@/lib/site-config';
 import EquipmentForm from '@/components/equipment/EquipmentForm';
 import StatusBadge from '@/components/ui/StatusBadge';
 import { Plus, Search, Loader2, MapPin } from 'lucide-react';
@@ -21,15 +22,40 @@ export default function EquipmentPage() {
   const [showForm, setShowForm] = useState(false);
 
   async function loadData() {
-    setLoading(true);
-    const [{ data: eq }, { data: b }] = await Promise.all([
-      supabase.from('equipment').select('*, buildings(name, building_number, station)').is('deleted_at', null).order('created_at', { ascending: false }),
-      supabase.from('buildings').select('*').is('deleted_at', null).order('building_number'),
-    ]);
-    setEquipment((eq as any) ?? []);
-    setBuildings(b ?? []);
+  setLoading(true);
+
+  const { data: department } = await supabase
+    .from('departments')
+    .select('id')
+    .eq('code', DEPARTMENT_CODE)
+    .single();
+
+  if (!department) {
+    setEquipment([]);
+    setBuildings([]);
     setLoading(false);
+    return;
   }
+
+  const [{ data: eq }, { data: b }] = await Promise.all([
+    supabase
+      .from('equipment')
+      .select('*, buildings(name, building_number, station)')
+      .eq('department_id', department.id)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false }),
+
+    supabase
+      .from('buildings')
+      .select('*')
+      .is('deleted_at', null)
+      .order('building_number'),
+  ]);
+
+  setEquipment((eq as any) ?? []);
+  setBuildings(b ?? []);
+  setLoading(false);
+}
 
   useEffect(() => {
     loadData();
