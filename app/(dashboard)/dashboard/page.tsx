@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
-import { DEPARTMENT_CODE } from '@/lib/site-config';
+import { DEPARTMENT_CODE, CURRENT_DASHBOARD_CONFIG } from '@/lib/site-config';
 import StatCard from '@/components/ui/StatCard';
 import { EquipmentStatusChart, FaultPriorityChart } from '@/components/dashboard/DashboardCharts';
 import {
@@ -77,8 +77,8 @@ export default async function DashboardPage() {
 
   const [
     { count: buildingsCount },
-    { data: generators },
-    { data: upsUnits },
+    { data: primaryAssets },
+    { data: secondaryAssets },
     { data: openFaults },
     { data: statusCounts },
     { data: buildings },
@@ -95,14 +95,14 @@ export default async function DashboardPage() {
     supabase
       .from('equipment')
       .select('id,status')
-      .eq('type', 'generator')
+      .eq('type', CURRENT_DASHBOARD_CONFIG.primaryType)
       .eq('department_id', departmentId)
       .is('deleted_at', null),
 
     supabase
       .from('equipment')
       .select('id,status')
-      .eq('type', 'ups')
+      .eq('type', CURRENT_DASHBOARD_CONFIG.secondaryType)
       .eq('department_id', departmentId)
       .is('deleted_at', null),
 
@@ -153,14 +153,25 @@ export default async function DashboardPage() {
       .lt('next_maintenance_date', today),
   ]);
 
-  const generatorTotal = generators?.length ?? 0;
-  const generatorReady = (generators ?? []).filter((e) => ['available', 'running', 'standby'].includes(e.status)).length;
-  const generatorReadiness = generatorTotal > 0 ? Math.round((generatorReady / generatorTotal) * 100) : 100;
+  const primaryTotal = primaryAssets?.length ?? 0;
+const primaryReady = (primaryAssets ?? []).filter((e) =>
+  ['available', 'running', 'standby'].includes(e.status)
+).length;
 
-  const upsTotal = upsUnits?.length ?? 0;
-  const upsReady = (upsUnits ?? []).filter((e) => ['available', 'running', 'standby'].includes(e.status)).length;
-  const upsReadiness = upsTotal > 0 ? Math.round((upsReady / upsTotal) * 100) : 100;
+const primaryReadiness =
+  primaryTotal > 0
+    ? Math.round((primaryReady / primaryTotal) * 100)
+    : 100;
 
+const secondaryTotal = secondaryAssets?.length ?? 0;
+const secondaryReady = (secondaryAssets ?? []).filter((e) =>
+  ['available', 'running', 'standby'].includes(e.status)
+).length;
+
+const secondaryReadiness =
+  secondaryTotal > 0
+    ? Math.round((secondaryReady / secondaryTotal) * 100)
+    : 100;
   const statusOrder = ['available', 'running', 'standby', 'under_maintenance', 'fault', 'out_of_service'];
   const statusData = statusOrder.map((status) => ({
     status,
@@ -242,23 +253,64 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-gray-900">لوحة التحكم</h1>
-        <p className="text-sm text-gray-500">نظرة عامة تشغيلية على حالة الأصول والصيانة والاختبارات</p>
+       <h1 className="text-xl font-bold text-gray-900">
+  {CURRENT_DASHBOARD_CONFIG.title}
+</h1>
+
+<p className="text-sm text-gray-500">
+  {CURRENT_DASHBOARD_CONFIG.subtitle}
+</p>
       </div>
 
       {/* الصف الأول: أهم الأرقام التشغيلية */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
         <StatCard label="إجمالي المباني" value={buildingsCount ?? 0} icon={Building2} />
-        <StatCard label="المولدات" value={generatorTotal} icon={Zap} tone="warning" />
-        <StatCard label="أجهزة UPS" value={upsTotal} icon={BatteryCharging} tone="success" />
+        <StatCard
+  label={CURRENT_DASHBOARD_CONFIG.primaryLabel}
+  value={primaryTotal}
+  icon={Zap}
+  tone="warning"
+/>
+
+<StatCard
+  label={CURRENT_DASHBOARD_CONFIG.secondaryLabel}
+  value={secondaryTotal}
+  icon={BatteryCharging}
+  tone="success"
+/>
         <StatCard label="الأعطال المفتوحة" value={openFaults?.length ?? 0} icon={AlertTriangle} tone="danger" />
         <StatCard label="الصيانة المتأخرة" value={overdueMaintenanceCount} icon={Wrench} tone={overdueMaintenanceCount > 0 ? 'warning' : 'success'} />
       </div>
 
       {/* الصف الثاني: مؤشرات الجاهزية والمخزون والضمان */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
-        <StatCard label="جاهزية المولدات" value={generatorReadiness} suffix="%" icon={Gauge} tone={generatorReadiness >= 90 ? 'success' : generatorReadiness >= 75 ? 'warning' : 'danger'} />
-        <StatCard label="جاهزية UPS" value={upsReadiness} suffix="%" icon={ShieldCheck} tone={upsReadiness >= 90 ? 'success' : upsReadiness >= 75 ? 'warning' : 'danger'} />
+        <StatCard
+  label={CURRENT_DASHBOARD_CONFIG.primaryReadinessLabel}
+  value={primaryReadiness}
+  suffix="%"
+  icon={Gauge}
+  tone={
+    primaryReadiness >= 90
+      ? 'success'
+      : primaryReadiness >= 75
+        ? 'warning'
+        : 'danger'
+  }
+/>
+
+<StatCard
+  label={CURRENT_DASHBOARD_CONFIG.secondaryReadinessLabel}
+  value={secondaryReadiness}
+  suffix="%"
+  icon={ShieldCheck}
+  tone={
+    secondaryReadiness >= 90
+      ? 'success'
+      : secondaryReadiness >= 75
+        ? 'warning'
+        : 'danger'
+  }
+/>
         <StatCard label="قطع غيار منخفضة المخزون" value={lowStockCount} icon={PackageX} tone={lowStockCount > 0 ? 'warning' : 'success'} />
         <StatCard label="ضمانات منتهية" value={expiredWarrantyCount} icon={ShieldAlert} tone={expiredWarrantyCount > 0 ? 'danger' : 'success'} />
         <StatCard label="ضمانات تنتهي خلال 30 يوم" value={expiringWarrantyCount} icon={CalendarClock} tone={expiringWarrantyCount > 0 ? 'warning' : 'success'} />
