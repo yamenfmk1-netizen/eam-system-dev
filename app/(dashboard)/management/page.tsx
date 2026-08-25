@@ -31,7 +31,8 @@ type Department = {
 type DetailView =
   | 'affected'
   | 'faults'
-  | 'maintenance';
+  | 'maintenance'
+  | 'spare_parts';
 
 type ManagementPageProps = {
   searchParams?: {
@@ -164,7 +165,7 @@ export default async function ManagementPage({
     supabase
       .from('spare_parts')
       .select(
-        'id,department_id,quantity_available,minimum_stock,warranty_end_date'
+        'id,department_id,part_name,part_number,manufacturer,storage_location,quantity_available,minimum_stock,warranty_end_date'
       )
       .in('department_id', departmentIds),
   ]);
@@ -396,6 +397,7 @@ export default async function ManagementPage({
     'affected',
     'faults',
     'maintenance',
+    'spare_parts',
   ];
 
   const selectedView =
@@ -405,7 +407,6 @@ export default async function ManagementPage({
       ? (requestedView as DetailView)
       : null;
 
-  // مهم:
   // لا نسمح بعرض قسم غير موجود ضمن صلاحيات المستخدم
   const selectedDepartment =
     departmentStats.find(
@@ -435,6 +436,15 @@ export default async function ManagementPage({
   const selectedDepartmentMaintenance =
     selectedDepartment
       ? (maintenanceRecords ?? []).filter(
+          (item) =>
+            item.department_id ===
+            selectedDepartment.id
+        )
+      : [];
+
+  const selectedDepartmentParts =
+    selectedDepartment
+      ? (spareParts ?? []).filter(
           (item) =>
             item.department_id ===
             selectedDepartment.id
@@ -503,6 +513,29 @@ export default async function ManagementPage({
         item.next_maintenance_date < today
     );
 
+  // ===============================
+  // تفاصيل نقص قطع الغيار
+  // ===============================
+
+  const lowStockPartDetails =
+    selectedDepartmentParts.filter(
+      (item) => {
+        const available = Number(
+          item.quantity_available ?? 0
+        );
+
+        const minimum = Number(
+          item.minimum_stock ?? 0
+        );
+
+        return available <= minimum;
+      }
+    );
+
+  // ===============================
+  // عنوان وعدد التفاصيل
+  // ===============================
+
   const detailTitle =
     selectedView === 'affected'
       ? 'الأصول المتأثرة'
@@ -510,7 +543,9 @@ export default async function ManagementPage({
         ? 'الأعطال المفتوحة'
         : selectedView === 'maintenance'
           ? 'الصيانة المتأخرة'
-          : '';
+          : selectedView === 'spare_parts'
+            ? 'نقص قطع الغيار'
+            : '';
 
   const detailCount =
     selectedView === 'affected'
@@ -521,7 +556,9 @@ export default async function ManagementPage({
           ? useSchedules
             ? overdueScheduleDetails.length
             : overdueMaintenanceRecordDetails.length
-          : 0;
+          : selectedView === 'spare_parts'
+            ? lowStockPartDetails.length
+            : 0;
 
   return (
     <div
@@ -663,7 +700,7 @@ export default async function ManagementPage({
                     </p>
                   </div>
 
-                  {/* الأصول المتأثرة - قابلة للضغط */}
+                  {/* الأصول المتأثرة */}
                   <Link
                     href={`/management?department=${department.id}&view=affected#management-details`}
                     className="group rounded-xl bg-gray-50 p-4 transition hover:bg-blue-50 hover:ring-1 hover:ring-blue-200"
@@ -683,7 +720,7 @@ export default async function ManagementPage({
                     </p>
                   </Link>
 
-                  {/* الأعطال المفتوحة - قابلة للضغط */}
+                  {/* الأعطال المفتوحة */}
                   <Link
                     href={`/management?department=${department.id}&view=faults#management-details`}
                     className="group rounded-xl bg-gray-50 p-4 transition hover:bg-orange-50 hover:ring-1 hover:ring-orange-200"
@@ -716,7 +753,7 @@ export default async function ManagementPage({
                     </p>
                   </div>
 
-                  {/* الصيانة المتأخرة - قابلة للضغط */}
+                  {/* الصيانة المتأخرة */}
                   <Link
                     href={`/management?department=${department.id}&view=maintenance#management-details`}
                     className="group rounded-xl bg-gray-50 p-4 transition hover:bg-amber-50 hover:ring-1 hover:ring-amber-200"
@@ -737,17 +774,24 @@ export default async function ManagementPage({
                   </Link>
 
                   {/* نقص قطع الغيار */}
-                  <div className="rounded-xl bg-gray-50 p-4">
-                    <p className="text-sm text-gray-500">
-                      نقص قطع الغيار
-                    </p>
+                  <Link
+                    href={`/management?department=${department.id}&view=spare_parts#management-details`}
+                    className="group rounded-xl bg-gray-50 p-4 transition hover:bg-purple-50 hover:ring-1 hover:ring-purple-200"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm text-gray-500 group-hover:text-purple-700">
+                        نقص قطع الغيار
+                      </p>
 
-                    <p className="mt-1 text-2xl font-bold">
+                      <ChevronLeft className="h-4 w-4 text-gray-300 transition group-hover:text-purple-600" />
+                    </div>
+
+                    <p className="mt-1 text-2xl font-bold group-hover:text-purple-700">
                       {
                         department.lowStockParts
                       }
                     </p>
-                  </div>
+                  </Link>
                 </div>
               </div>
             )
@@ -1078,6 +1122,134 @@ export default async function ManagementPage({
                                 }
                               </span>
                             </div>
+                          </div>
+                        );
+                      }
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* ==========================
+                نقص قطع الغيار
+                ========================== */}
+
+            {selectedView ===
+              'spare_parts' && (
+              <>
+                {lowStockPartDetails.length ===
+                0 ? (
+                  <div className="rounded-xl bg-gray-50 p-6 text-center text-gray-500">
+                    لا توجد قطع غيار منخفضة
+                    المخزون حالياً.
+                  </div>
+                ) : (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {lowStockPartDetails.map(
+                      (part: any) => {
+                        const available =
+                          Number(
+                            part.quantity_available ??
+                              0
+                          );
+
+                        const minimum =
+                          Number(
+                            part.minimum_stock ??
+                              0
+                          );
+
+                        const shortage =
+                          Math.max(
+                            minimum - available,
+                            0
+                          );
+
+                        const atMinimum =
+                          available === minimum;
+
+                        return (
+                          <div
+                            key={part.id}
+                            className="rounded-xl border p-4"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="font-bold text-gray-900">
+                                  {
+                                    part.part_name
+                                  }
+                                </p>
+
+                                {part.part_number && (
+                                  <p className="mt-1 text-sm text-gray-500">
+                                    رقم القطعة:{' '}
+                                    {
+                                      part.part_number
+                                    }
+                                  </p>
+                                )}
+
+                                {part.manufacturer && (
+                                  <p className="mt-1 text-sm text-gray-500">
+                                    الشركة:{' '}
+                                    {
+                                      part.manufacturer
+                                    }
+                                  </p>
+                                )}
+                              </div>
+
+                              <span
+                                className={
+                                  atMinimum
+                                    ? 'rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700'
+                                    : 'rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-700'
+                                }
+                              >
+                                {atMinimum
+                                  ? 'عند الحد الأدنى'
+                                  : `ناقص ${shortage}`}
+                              </span>
+                            </div>
+
+                            <div className="mt-4 grid grid-cols-2 gap-3">
+                              <div className="rounded-lg bg-gray-50 p-3">
+                                <p className="text-xs text-gray-500">
+                                  المتوفر
+                                </p>
+
+                                <p className="mt-1 text-xl font-bold">
+                                  {
+                                    available
+                                  }
+                                </p>
+                              </div>
+
+                              <div className="rounded-lg bg-gray-50 p-3">
+                                <p className="text-xs text-gray-500">
+                                  الحد الأدنى
+                                </p>
+
+                                <p className="mt-1 text-xl font-bold">
+                                  {
+                                    minimum
+                                  }
+                                </p>
+                              </div>
+                            </div>
+
+                            {part.storage_location && (
+                              <p className="mt-3 text-sm text-gray-500">
+                                موقع التخزين:{' '}
+                                <span className="font-medium text-gray-700">
+                                  {
+                                    part.storage_location
+                                  }
+                                </span>
+                              </p>
+                            )}
                           </div>
                         );
                       }
