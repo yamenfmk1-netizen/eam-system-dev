@@ -7,6 +7,7 @@ import {
   Package, FileText, BarChart3, Bell, Users, Settings, History, Zap, Network,
 } from 'lucide-react';
 import type { UserRole } from '@/types/database.types';
+import { DEPARTMENT_CODE } from '@/lib/site-config';
 
 const navItems = [
   { href: '/dashboard', label: 'لوحة التحكم', icon: LayoutDashboard, roles: ['admin', 'engineer', 'technician', 'viewer'] },
@@ -24,7 +25,12 @@ const navItems = [
   { href: '/audit-log', label: 'سجل التعديلات', icon: History, roles: ['admin'] },
   { href: '/settings', label: 'الإعدادات', icon: Settings, roles: ['admin'] },
 ];
-
+const SIDEBAR_TITLES = {
+  electrical: 'إدارة الأصول الكهربائية',
+  hvac: 'إدارة أصول التكييف',
+  mechanical: 'إدارة الأصول الميكانيكية',
+  civil: 'إدارة الأصول المدنية',
+} as const;
 export default function Sidebar({ role }: { role: UserRole }) {
   const pathname = usePathname();
 
@@ -35,14 +41,20 @@ export default function Sidebar({ role }: { role: UserRole }) {
           <Zap className="h-5 w-5" />
         </div>
         <div className="leading-tight">
-          <p className="text-sm font-bold text-gray-900">إدارة الأصول الكهربائية</p>
+          <p className="text-sm font-bold text-gray-900">
+  {SIDEBAR_TITLES[DEPARTMENT_CODE]}
+</p>
           <p className="text-xs text-gray-400">نظام الصيانة والتشغيل</p>
         </div>
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
         {navItems
-          .filter((item) => item.roles.includes(role))
+          .filter(
+  (item) =>
+    item.roles.includes(role) &&
+    (item.href !== '/mv-network' || DEPARTMENT_CODE === 'electrical')
+)
           .map((item) => {
             const active = pathname === item.href || pathname.startsWith(item.href + '/');
             const Icon = item.icon;
