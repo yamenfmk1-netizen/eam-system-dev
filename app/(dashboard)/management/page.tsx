@@ -62,6 +62,7 @@ export default async function ManagementPage() {
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold">لوحة الإدارة</h1>
+
           <p className="text-gray-500">
             لا توجد أقسام مرتبطة بهذا الحساب.
           </p>
@@ -90,25 +91,31 @@ export default async function ManagementPage() {
 
     supabase
       .from('equipment')
-      .select('id,department_id,status,building_id')
+      .select('id,department_id,status')
       .in('department_id', departmentIds)
       .is('deleted_at', null),
 
     supabase
       .from('faults')
-      .select('id,department_id,priority,status')
+      .select(
+        'id,department_id,equipment_id,priority,status'
+      )
       .in('department_id', departmentIds)
       .in('status', OPEN_FAULT_STATUSES),
 
     supabase
       .from('maintenance_schedules')
-      .select('id,department_id,next_due_date,is_active')
+      .select(
+        'id,department_id,next_due_date,is_active'
+      )
       .in('department_id', departmentIds)
       .eq('is_active', true),
 
     supabase
       .from('maintenance_records')
-      .select('id,department_id,next_maintenance_date')
+      .select(
+        'id,department_id,next_maintenance_date'
+      )
       .in('department_id', departmentIds)
       .not('next_maintenance_date', 'is', null),
 
@@ -135,7 +142,9 @@ export default async function ManagementPage() {
       (item) => item.department_id === department.id
     );
 
-    const departmentMaintenance = (maintenanceRecords ?? []).filter(
+    const departmentMaintenance = (
+      maintenanceRecords ?? []
+    ).filter(
       (item) => item.department_id === department.id
     );
 
@@ -143,25 +152,32 @@ export default async function ManagementPage() {
       (item) => item.department_id === department.id
     );
 
+    // إجمالي الأصول
     const totalAssets = departmentEquipment.length;
 
+    // الأصول الجاهزة
     const readyAssets = departmentEquipment.filter((item) =>
       READY_STATUSES.includes(item.status)
     ).length;
 
+    // نسبة الجاهزية
     const readiness =
       totalAssets > 0
         ? Math.round((readyAssets / totalAssets) * 100)
         : null;
 
-    const buildingsWithAssets = new Set(
-      departmentEquipment
-        .map((item) => item.building_id)
+    // الأعطال المفتوحة
+    const openFaults = departmentFaults.length;
+
+    // الأصول المتأثرة:
+    // نحسب كل أصل مرة واحدة حتى لو عليه أكثر من عطل مفتوح
+    const affectedAssets = new Set(
+      departmentFaults
+        .map((item) => item.equipment_id)
         .filter(Boolean)
     ).size;
 
-    const openFaults = departmentFaults.length;
-
+    // الأعطال الحرجة
     const criticalFaults = departmentFaults.filter(
       (item) => item.priority === 'critical'
     ).length;
@@ -174,24 +190,32 @@ export default async function ManagementPage() {
         item.next_due_date < today
     ).length;
 
-    const overdueMaintenanceFallback = departmentMaintenance.filter(
-      (item) =>
-        item.next_maintenance_date &&
-        item.next_maintenance_date < today
-    ).length;
+    const overdueMaintenanceFallback =
+      departmentMaintenance.filter(
+        (item) =>
+          item.next_maintenance_date &&
+          item.next_maintenance_date < today
+      ).length;
 
     const overdueMaintenance =
       departmentSchedules.length > 0
         ? overdueSchedules
         : overdueMaintenanceFallback;
 
+    // نقص قطع الغيار
     const lowStockParts = departmentParts.filter((item) => {
-      const available = Number(item.quantity_available ?? 0);
-      const minimum = Number(item.minimum_stock ?? 0);
+      const available = Number(
+        item.quantity_available ?? 0
+      );
+
+      const minimum = Number(
+        item.minimum_stock ?? 0
+      );
 
       return available <= minimum;
     }).length;
 
+    // الضمانات المنتهية
     const expiredWarranties = departmentParts.filter(
       (item) =>
         item.warranty_end_date &&
@@ -203,7 +227,7 @@ export default async function ManagementPage() {
       totalAssets,
       readyAssets,
       readiness,
-      buildingsWithAssets,
+      affectedAssets,
       openFaults,
       criticalFaults,
       overdueMaintenance,
@@ -212,50 +236,56 @@ export default async function ManagementPage() {
     };
   });
 
+  // إجمالي الأصول في كل الأقسام المسموحة
   const totalAssets = departmentStats.reduce(
     (sum, item) => sum + item.totalAssets,
     0
   );
 
+  // إجمالي الأعطال المفتوحة
   const totalOpenFaults = departmentStats.reduce(
     (sum, item) => sum + item.openFaults,
     0
   );
 
+  // إجمالي الأعطال الحرجة
   const totalCriticalFaults = departmentStats.reduce(
     (sum, item) => sum + item.criticalFaults,
     0
   );
 
-  const managementAlerts = departmentStats.flatMap((department) => {
-    const alerts: string[] = [];
+  // التنبيهات الإدارية
+  const managementAlerts = departmentStats.flatMap(
+    (department) => {
+      const alerts: string[] = [];
 
-    if (department.criticalFaults > 0) {
-      alerts.push(
-        `${department.name}: ${department.criticalFaults} أعطال حرجة مفتوحة`
-      );
+      if (department.criticalFaults > 0) {
+        alerts.push(
+          `${department.name}: ${department.criticalFaults} أعطال حرجة مفتوحة`
+        );
+      }
+
+      if (department.overdueMaintenance > 0) {
+        alerts.push(
+          `${department.name}: ${department.overdueMaintenance} أعمال صيانة متأخرة`
+        );
+      }
+
+      if (department.lowStockParts > 0) {
+        alerts.push(
+          `${department.name}: ${department.lowStockParts} قطع غيار منخفضة المخزون`
+        );
+      }
+
+      if (department.expiredWarranties > 0) {
+        alerts.push(
+          `${department.name}: ${department.expiredWarranties} ضمانات منتهية`
+        );
+      }
+
+      return alerts;
     }
-
-    if (department.overdueMaintenance > 0) {
-      alerts.push(
-        `${department.name}: ${department.overdueMaintenance} أعمال صيانة متأخرة`
-      );
-    }
-
-    if (department.lowStockParts > 0) {
-      alerts.push(
-        `${department.name}: ${department.lowStockParts} قطع غيار منخفضة المخزون`
-      );
-    }
-
-    if (department.expiredWarranties > 0) {
-      alerts.push(
-        `${department.name}: ${department.expiredWarranties} ضمانات منتهية`
-      );
-    }
-
-    return alerts;
-  });
+  );
 
   return (
     <div className="space-y-8" dir="rtl">
@@ -374,6 +404,7 @@ export default async function ManagementPage() {
               </div>
 
               <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+                {/* الأصول */}
                 <div className="rounded-xl bg-gray-50 p-4">
                   <p className="text-sm text-gray-500">
                     الأصول
@@ -384,16 +415,18 @@ export default async function ManagementPage() {
                   </p>
                 </div>
 
+                {/* الأصول المتأثرة */}
                 <div className="rounded-xl bg-gray-50 p-4">
                   <p className="text-sm text-gray-500">
-                    المباني
+                    الأصول المتأثرة
                   </p>
 
                   <p className="mt-1 text-2xl font-bold">
-                    {department.buildingsWithAssets}
+                    {department.affectedAssets}
                   </p>
                 </div>
 
+                {/* الأعطال المفتوحة */}
                 <div className="rounded-xl bg-gray-50 p-4">
                   <p className="text-sm text-gray-500">
                     الأعطال المفتوحة
@@ -404,6 +437,7 @@ export default async function ManagementPage() {
                   </p>
                 </div>
 
+                {/* الأعطال الحرجة */}
                 <div className="rounded-xl bg-gray-50 p-4">
                   <p className="text-sm text-gray-500">
                     الأعطال الحرجة
@@ -414,6 +448,7 @@ export default async function ManagementPage() {
                   </p>
                 </div>
 
+                {/* الصيانة المتأخرة */}
                 <div className="rounded-xl bg-gray-50 p-4">
                   <p className="text-sm text-gray-500">
                     الصيانة المتأخرة
@@ -424,6 +459,7 @@ export default async function ManagementPage() {
                   </p>
                 </div>
 
+                {/* نقص قطع الغيار */}
                 <div className="rounded-xl bg-gray-50 p-4">
                   <p className="text-sm text-gray-500">
                     نقص قطع الغيار
