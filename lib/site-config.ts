@@ -78,3 +78,9 @@ export const DEPARTMENT_DASHBOARD_CONFIG = {
 
 export const CURRENT_DASHBOARD_CONFIG =
   DEPARTMENT_DASHBOARD_CONFIG[DEPARTMENT_CODE];
+export type SiteMode = 'department' | 'management';
+
+export const SITE_MODE =
+  (process.env.NEXT_PUBLIC_SITE_MODE || 'department') as SiteMode;
+
+export const IS_MANAGEMENT_SITE = SITE_MODE === 'management';
