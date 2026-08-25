@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
+import { DEPARTMENT_CODE } from '@/lib/site-config';
 import { Loader2, AlertTriangle, Wrench, ClipboardCheck, Package, Bell } from 'lucide-react';
 
 interface AlertItem {
@@ -22,16 +23,54 @@ export default function NotificationsPage() {
   useEffect(() => {
     async function load() {
       setLoading(true);
+            const { data: department } = await supabase
+        .from('departments')
+        .select('id')
+        .eq('code', DEPARTMENT_CODE)
+        .single();
+
+      if (!department) {
+        setAlerts([]);
+        setLoading(false);
+        return;
+      }
       const in7days = new Date();
       in7days.setDate(in7days.getDate() + 7);
       const todayStr = new Date().toISOString().slice(0, 10);
       const in7Str = in7days.toISOString().slice(0, 10);
 
-      const [{ data: lowStock }, { data: dueMaintenance }, { data: dueTests }, { data: openFaults }] = await Promise.all([
-        supabase.from('spare_parts').select('id, part_name, quantity_available, minimum_stock'),
-        supabase.from('maintenance_records').select('id, maintenance_number, next_maintenance_date, building_id, buildings(name)').gte('next_maintenance_date', todayStr).lte('next_maintenance_date', in7Str),
-        supabase.from('tests').select('id, test_number, next_test_date, building_id, buildings(name)').gte('next_test_date', todayStr).lte('next_test_date', in7Str),
-        supabase.from('faults').select('id, fault_number, priority, description, buildings(name)').in('status', ['open', 'assigned', 'in_progress']).eq('priority', 'critical'),
+            const [
+        { data: lowStock },
+        { data: dueMaintenance },
+        { data: dueTests },
+        { data: openFaults },
+      ] = await Promise.all([
+
+        supabase
+          .from('spare_parts')
+          .select('id, part_name, quantity_available, minimum_stock')
+          .eq('department_id', department.id),
+
+        supabase
+          .from('maintenance_records')
+          .select('id, maintenance_number, next_maintenance_date, building_id, buildings(name)')
+          .eq('department_id', department.id)
+          .gte('next_maintenance_date', todayStr)
+          .lte('next_maintenance_date', in7Str),
+
+        supabase
+          .from('tests')
+          .select('id, test_number, next_test_date, building_id, buildings(name)')
+          .eq('department_id', department.id)
+          .gte('next_test_date', todayStr)
+          .lte('next_test_date', in7Str),
+
+        supabase
+          .from('faults')
+          .select('id, fault_number, priority, description, buildings(name)')
+          .eq('department_id', department.id)
+          .in('status', ['open', 'assigned', 'in_progress'])
+          .eq('priority', 'critical'),
       ]);
 
       const items: AlertItem[] = [];
