@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Search, Bell, LogOut, User, Building2, Cpu, AlertTriangle, Package, Loader2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { DEPARTMENT_CODE } from '@/lib/site-config';
 import { roleLabel } from '@/lib/auth/permissions';
 import type { UserRole } from '@/types/database.types';
 
@@ -30,6 +31,7 @@ export default function Header({
   const [searching, setSearching] = useState(false);
   const [open, setOpen] = useState(false);
   const [notifCount, setNotifCount] = useState(0);
+  const [departmentId, setDepartmentId] = useState<string | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -41,31 +43,80 @@ export default function Header({
   }, []);
 
   useEffect(() => {
-    async function loadCount() {
-      const { count } = await supabase
-        .from('faults')
-        .select('*', { count: 'exact', head: true })
-        .in('status', ['open', 'assigned', 'in_progress']);
-      setNotifCount(count ?? 0);
-    }
-    loadCount();
-  }, []);
+  async function loadDepartment() {
+    const { data: department } = await supabase
+      .from('departments')
+      .select('id')
+      .eq('code', DEPARTMENT_CODE)
+      .single();
+
+    setDepartmentId(department?.id ?? null);
+  }
+
+  loadDepartment();
+}, []);
+
+ useEffect(() => {
+  async function loadCount() {
+    if (!departmentId) return;
+
+    const { count } = await supabase
+      .from('faults')
+      .select('*', { count: 'exact', head: true })
+      .eq('department_id', departmentId)
+      .in('status', ['open', 'assigned', 'in_progress']);
+
+    setNotifCount(count ?? 0);
+  }
+
+  loadCount();
+}, [departmentId]);
 
   useEffect(() => {
-    const q = query.trim();
-    if (q.length < 2) {
-      setResults([]);
-      return;
-    }
+   const q = query.trim();
+
+if (q.length < 2 || !departmentId) {
+  setResults([]);
+  return;
+}
     const timeout = setTimeout(async () => {
       setSearching(true);
-      const [{ data: buildings }, { data: equipment }, { data: faults }, { data: spareParts }] = await Promise.all([
-        supabase.from('buildings').select('id, name, building_number').is('deleted_at', null).or(`name.ilike.%${q}%,building_number.ilike.%${q}%`).limit(4),
-        supabase.from('equipment').select('id, name, asset_id, manufacturer, serial_number').is('deleted_at', null).or(`name.ilike.%${q}%,asset_id.ilike.%${q}%,manufacturer.ilike.%${q}%,serial_number.ilike.%${q}%`).limit(4),
-        supabase.from('faults').select('id, fault_number, description').or(`fault_number.ilike.%${q}%,description.ilike.%${q}%`).limit(4),
-        supabase.from('spare_parts').select('id, part_name, part_number').or(`part_name.ilike.%${q}%,part_number.ilike.%${q}%`).limit(4),
-      ]);
+     const [
+  { data: buildings },
+  { data: equipment },
+  { data: faults },
+  { data: spareParts },
+] = await Promise.all([
 
+  supabase
+    .from('buildings')
+    .select('id, name, building_number')
+    .is('deleted_at', null)
+    .or(`name.ilike.%${q}%,building_number.ilike.%${q}%`)
+    .limit(4),
+
+  supabase
+    .from('equipment')
+    .select('id, name, asset_id, manufacturer, serial_number')
+    .eq('department_id', departmentId)
+    .is('deleted_at', null)
+    .or(`name.ilike.%${q}%,asset_id.ilike.%${q}%,manufacturer.ilike.%${q}%,serial_number.ilike.%${q}%`)
+    .limit(4),
+
+  supabase
+    .from('faults')
+    .select('id, fault_number, description')
+    .eq('department_id', departmentId)
+    .or(`fault_number.ilike.%${q}%,description.ilike.%${q}%`)
+    .limit(4),
+
+  supabase
+    .from('spare_parts')
+    .select('id, part_name, part_number')
+    .eq('department_id', departmentId)
+    .or(`part_name.ilike.%${q}%,part_number.ilike.%${q}%`)
+    .limit(4),
+]);
       const combined: SearchResult[] = [
         ...(buildings ?? []).map((b: any) => ({ type: 'building' as const, id: b.id, title: b.name, subtitle: `مبنى رقم ${b.building_number}`, href: `/buildings/${b.id}` })),
         ...(equipment ?? []).map((e: any) => ({ type: 'equipment' as const, id: e.id, title: e.name, subtitle: `${e.asset_id} · ${e.manufacturer ?? ''}`, href: `/equipment/${e.id}` })),
@@ -77,7 +128,7 @@ export default function Header({
       setOpen(true);
     }, 300);
     return () => clearTimeout(timeout);
-  }, [query]);
+  }, [query, departmentId]);
 
   async function handleLogout() {
     await supabase.auth.signOut();
