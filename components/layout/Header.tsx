@@ -54,9 +54,7 @@ export default function Header({
   const [open, setOpen] = useState(false);
   const [notifCount, setNotifCount] = useState(0);
 
-  // بدل قسم واحد، نخزن كل الأقسام المسموحة للمستخدم
   const [departmentIds, setDepartmentIds] = useState<string[]>([]);
-
   const [departmentNames, setDepartmentNames] = useState<
     Record<string, string>
   >({});
@@ -80,11 +78,8 @@ export default function Header({
     };
   }, []);
 
-  // تحديد الأقسام التي يستطيع المستخدم رؤيتها
   useEffect(() => {
     async function loadDepartments() {
-      // موقع الإدارة:
-      // نقرأ جميع الأقسام المسموحة للحساب
       if (IS_MANAGEMENT_SITE) {
         const {
           data: { user },
@@ -92,6 +87,7 @@ export default function Header({
 
         if (!user) {
           setDepartmentIds([]);
+          setDepartmentNames({});
           return;
         }
 
@@ -127,12 +123,9 @@ export default function Header({
         });
 
         setDepartmentNames(names);
-
         return;
       }
 
-      // مواقع الأقسام العادية:
-      // Electrical / HVAC / Mechanical / Civil
       const { data: department } = await supabase
         .from('departments')
         .select('id,name')
@@ -155,7 +148,6 @@ export default function Header({
     loadDepartments();
   }, []);
 
-  // عدد الأعطال المفتوحة
   useEffect(() => {
     async function loadCount() {
       if (departmentIds.length === 0) {
@@ -178,7 +170,6 @@ export default function Header({
     loadCount();
   }, [departmentIds]);
 
-  // البحث
   useEffect(() => {
     const q = query.trim();
 
@@ -191,59 +182,76 @@ export default function Header({
     const timeout = setTimeout(async () => {
       setSearching(true);
 
-      const [
-        { data: buildings },
-        { data: equipment },
-        { data: faults },
-        { data: spareParts },
-      ] = await Promise.all([
-        // المباني مشتركة
-        supabase
-          .from('buildings')
-          .select('id,name,building_number')
-          .is('deleted_at', null)
-          .or(
-            `name.ilike.%${q}%,building_number.ilike.%${q}%`
-          )
-          .limit(4),
+      const { data: buildings } = await supabase
+        .from('buildings')
+        .select('id,name,building_number')
+        .is('deleted_at', null)
+        .or(
+          `name.ilike.%${q}%,building_number.ilike.%${q}%`
+        )
+        .limit(4);
 
-        // المعدات من جميع الأقسام المسموحة
-        supabase
-          .from('equipment')
-          .select(
-            'id,name,asset_id,manufacturer,serial_number,department_id'
-          )
-          .in('department_id', departmentIds)
-          .is('deleted_at', null)
-          .or(
-            `name.ilike.%${q}%,asset_id.ilike.%${q}%,manufacturer.ilike.%${q}%,serial_number.ilike.%${q}%`
-          )
-          .limit(6),
+      const departmentSearches = await Promise.all(
+        departmentIds.map(async (departmentId) => {
+          const [
+            { data: equipment },
+            { data: faults },
+            { data: spareParts },
+          ] = await Promise.all([
+            supabase
+              .from('equipment')
+              .select(
+                'id,name,asset_id,manufacturer,serial_number,department_id'
+              )
+              .eq('department_id', departmentId)
+              .is('deleted_at', null)
+              .or(
+                `name.ilike.%${q}%,asset_id.ilike.%${q}%,manufacturer.ilike.%${q}%,serial_number.ilike.%${q}%`
+              )
+              .limit(5),
 
-        // الأعطال من جميع الأقسام المسموحة
-        supabase
-          .from('faults')
-          .select(
-            'id,fault_number,description,department_id'
-          )
-          .in('department_id', departmentIds)
-          .or(
-            `fault_number.ilike.%${q}%,description.ilike.%${q}%`
-          )
-          .limit(6),
+            supabase
+              .from('faults')
+              .select(
+                'id,fault_number,description,department_id'
+              )
+              .eq('department_id', departmentId)
+              .or(
+                `fault_number.ilike.%${q}%,description.ilike.%${q}%`
+              )
+              .limit(5),
 
-        // قطع الغيار من جميع الأقسام المسموحة
-        supabase
-          .from('spare_parts')
-          .select(
-            'id,part_name,part_number,department_id'
-          )
-          .in('department_id', departmentIds)
-          .or(
-            `part_name.ilike.%${q}%,part_number.ilike.%${q}%`
-          )
-          .limit(6),
-      ]);
+            supabase
+              .from('spare_parts')
+              .select(
+                'id,part_name,part_number,department_id'
+              )
+              .eq('department_id', departmentId)
+              .or(
+                `part_name.ilike.%${q}%,part_number.ilike.%${q}%`
+              )
+              .limit(5),
+          ]);
+
+          return {
+            equipment: equipment ?? [],
+            faults: faults ?? [],
+            spareParts: spareParts ?? [],
+          };
+        })
+      );
+
+      const allEquipment = departmentSearches.flatMap(
+        (department) => department.equipment
+      );
+
+      const allFaults = departmentSearches.flatMap(
+        (department) => department.faults
+      );
+
+      const allSpareParts = departmentSearches.flatMap(
+        (department) => department.spareParts
+      );
 
       const combined: SearchResult[] = [
         ...(buildings ?? []).map((b: any) => ({
@@ -254,7 +262,7 @@ export default function Header({
           href: `/buildings/${b.id}`,
         })),
 
-        ...(equipment ?? []).map((e: any) => ({
+        ...allEquipment.map((e: any) => ({
           type: 'equipment' as const,
           id: e.id,
           title: e.name,
@@ -268,7 +276,7 @@ export default function Header({
           href: `/equipment/${e.id}`,
         })),
 
-        ...(faults ?? []).map((f: any) => ({
+        ...allFaults.map((f: any) => ({
           type: 'fault' as const,
           id: f.id,
           title: f.fault_number,
@@ -279,13 +287,12 @@ export default function Header({
             .filter(Boolean)
             .join(' · '),
 
-          // مؤقتًا لا نرسل الإدارة إلى صفحة أعطال قسم واحد
           href: IS_MANAGEMENT_SITE
             ? '/management'
             : '/faults',
         })),
 
-        ...(spareParts ?? []).map((p: any) => ({
+        ...allSpareParts.map((p: any) => ({
           type: 'spare_part' as const,
           id: p.id,
           title: p.part_name,
@@ -296,7 +303,6 @@ export default function Header({
             .filter(Boolean)
             .join(' · '),
 
-          // مؤقتًا إلى أن نسوي صفحة إدارة للمخزون
           href: IS_MANAGEMENT_SITE
             ? '/management'
             : '/spare-parts',
