@@ -1,5 +1,10 @@
+import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { DEPARTMENT_CODE, CURRENT_DASHBOARD_CONFIG } from '@/lib/site-config';
+import {
+  DEPARTMENT_CODE,
+  CURRENT_DASHBOARD_CONFIG,
+  IS_MANAGEMENT_SITE,
+} from '@/lib/site-config';
 import StatCard from '@/components/ui/StatCard';
 import { EquipmentStatusChart, FaultPriorityChart } from '@/components/dashboard/DashboardCharts';
 import {
@@ -54,6 +59,9 @@ function remainingLabel(days: number) {
 }
 
 export default async function DashboardPage() {
+  if (IS_MANAGEMENT_SITE) {
+  redirect('/management');
+}
   const supabase = createClient();
 
   // معرفة القسم الخاص بهذا الموقع
