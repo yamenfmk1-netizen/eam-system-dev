@@ -55,9 +55,6 @@ export default function Header({
   const [notifCount, setNotifCount] = useState(0);
 
   const [departmentIds, setDepartmentIds] = useState<string[]>([]);
-  const [departmentNames, setDepartmentNames] = useState<
-    Record<string, string>
-  >({});
 
   const boxRef = useRef<HTMLDivElement>(null);
 
@@ -78,8 +75,11 @@ export default function Header({
     };
   }, []);
 
+  // تحديد الأقسام الخاصة بالمستخدم
   useEffect(() => {
     async function loadDepartments() {
+      // موقع الإدارة:
+      // نأخذ كل الأقسام المسموحة للمستخدم
       if (IS_MANAGEMENT_SITE) {
         const {
           data: { user },
@@ -87,7 +87,6 @@ export default function Header({
 
         if (!user) {
           setDepartmentIds([]);
-          setDepartmentNames({});
           return;
         }
 
@@ -105,49 +104,25 @@ export default function Header({
         );
 
         setDepartmentIds(ids);
-
-        if (ids.length === 0) {
-          setDepartmentNames({});
-          return;
-        }
-
-        const { data: departments } = await supabase
-          .from('departments')
-          .select('id,name')
-          .in('id', ids);
-
-        const names: Record<string, string> = {};
-
-        (departments ?? []).forEach((department) => {
-          names[department.id] = department.name;
-        });
-
-        setDepartmentNames(names);
         return;
       }
 
+      // مواقع الأقسام العادية
       const { data: department } = await supabase
         .from('departments')
-        .select('id,name')
+        .select('id')
         .eq('code', DEPARTMENT_CODE)
         .single();
 
-      if (!department) {
-        setDepartmentIds([]);
-        setDepartmentNames({});
-        return;
-      }
-
-      setDepartmentIds([department.id]);
-
-      setDepartmentNames({
-        [department.id]: department.name,
-      });
+      setDepartmentIds(
+        department?.id ? [department.id] : []
+      );
     }
 
     loadDepartments();
   }, []);
 
+  // عدد الأعطال المفتوحة
   useEffect(() => {
     async function loadCount() {
       if (departmentIds.length === 0) {
@@ -170,152 +145,164 @@ export default function Header({
     loadCount();
   }, [departmentIds]);
 
+  // البحث
   useEffect(() => {
     const q = query.trim();
 
-    if (q.length < 2 || departmentIds.length === 0) {
+    if (q.length < 2) {
       setResults([]);
       setOpen(false);
+      return;
+    }
+
+    if (
+      !IS_MANAGEMENT_SITE &&
+      departmentIds.length === 0
+    ) {
+      setResults([]);
       return;
     }
 
     const timeout = setTimeout(async () => {
       setSearching(true);
 
-      const { data: buildings } = await supabase
-        .from('buildings')
-        .select('id,name,building_number')
-        .is('deleted_at', null)
-        .or(
-          `name.ilike.%${q}%,building_number.ilike.%${q}%`
-        )
-        .limit(4);
+      try {
+        // ========================================
+        // موقع الإدارة
+        // يستخدم Management Search API
+        // ========================================
+        if (IS_MANAGEMENT_SITE) {
+          const response = await fetch(
+            `/api/management-search?q=${encodeURIComponent(q)}`,
+            {
+              cache: 'no-store',
+            }
+          );
 
-      const departmentSearches = await Promise.all(
-        departmentIds.map(async (departmentId) => {
-          const [
-            { data: equipment },
-            { data: faults },
-            { data: spareParts },
-          ] = await Promise.all([
-            supabase
-              .from('equipment')
-              .select(
-                'id,name,asset_id,manufacturer,serial_number,department_id'
-              )
-              .eq('department_id', departmentId)
-              .is('deleted_at', null)
-              .or(
-                `name.ilike.%${q}%,asset_id.ilike.%${q}%,manufacturer.ilike.%${q}%,serial_number.ilike.%${q}%`
-              )
-              .limit(5),
+          if (!response.ok) {
+            setResults([]);
+            setOpen(true);
+            return;
+          }
 
-            supabase
-              .from('faults')
-              .select(
-                'id,fault_number,description,department_id'
-              )
-              .eq('department_id', departmentId)
-              .or(
-                `fault_number.ilike.%${q}%,description.ilike.%${q}%`
-              )
-              .limit(5),
+          const data = await response.json();
 
-            supabase
-              .from('spare_parts')
-              .select(
-                'id,part_name,part_number,department_id'
-              )
-              .eq('department_id', departmentId)
-              .or(
-                `part_name.ilike.%${q}%,part_number.ilike.%${q}%`
-              )
-              .limit(5),
-          ]);
+          setResults(data.results ?? []);
+          setOpen(true);
 
-          return {
-            equipment: equipment ?? [],
-            faults: faults ?? [],
-            spareParts: spareParts ?? [],
-          };
-        })
-      );
+          return;
+        }
 
-      const allEquipment = departmentSearches.flatMap(
-        (department) => department.equipment
-      );
+        // ========================================
+        // مواقع الأقسام العادية
+        // Electrical / HVAC / غيرها
+        // ========================================
 
-      const allFaults = departmentSearches.flatMap(
-        (department) => department.faults
-      );
+        const departmentId = departmentIds[0];
 
-      const allSpareParts = departmentSearches.flatMap(
-        (department) => department.spareParts
-      );
+        const [
+          { data: buildings },
+          { data: equipment },
+          { data: faults },
+          { data: spareParts },
+        ] = await Promise.all([
+          supabase
+            .from('buildings')
+            .select('id,name,building_number')
+            .is('deleted_at', null)
+            .or(
+              `name.ilike.%${q}%,building_number.ilike.%${q}%`
+            )
+            .limit(4),
 
-      const combined: SearchResult[] = [
-        ...(buildings ?? []).map((b: any) => ({
-          type: 'building' as const,
-          id: b.id,
-          title: b.name,
-          subtitle: `مبنى رقم ${b.building_number}`,
-          href: `/buildings/${b.id}`,
-        })),
+          supabase
+            .from('equipment')
+            .select(
+              'id,name,asset_id,manufacturer,serial_number'
+            )
+            .eq('department_id', departmentId)
+            .is('deleted_at', null)
+            .or(
+              `name.ilike.%${q}%,asset_id.ilike.%${q}%,manufacturer.ilike.%${q}%,serial_number.ilike.%${q}%`
+            )
+            .limit(6),
 
-        ...allEquipment.map((e: any) => ({
-          type: 'equipment' as const,
-          id: e.id,
-          title: e.name,
-          subtitle: [
-            e.asset_id,
-            e.manufacturer,
-            departmentNames[e.department_id],
-          ]
-            .filter(Boolean)
-            .join(' · '),
-          href: `/equipment/${e.id}`,
-        })),
+          supabase
+            .from('faults')
+            .select(
+              'id,fault_number,description'
+            )
+            .eq('department_id', departmentId)
+            .or(
+              `fault_number.ilike.%${q}%,description.ilike.%${q}%`
+            )
+            .limit(6),
 
-        ...allFaults.map((f: any) => ({
-          type: 'fault' as const,
-          id: f.id,
-          title: f.fault_number,
-          subtitle: [
-            f.description,
-            departmentNames[f.department_id],
-          ]
-            .filter(Boolean)
-            .join(' · '),
+          supabase
+            .from('spare_parts')
+            .select(
+              'id,part_name,part_number'
+            )
+            .eq('department_id', departmentId)
+            .or(
+              `part_name.ilike.%${q}%,part_number.ilike.%${q}%`
+            )
+            .limit(6),
+        ]);
 
-          href: IS_MANAGEMENT_SITE
-            ? '/management'
-            : '/faults',
-        })),
+        const combined: SearchResult[] = [
+          ...(buildings ?? []).map((b: any) => ({
+            type: 'building' as const,
+            id: b.id,
+            title: b.name,
+            subtitle: `مبنى رقم ${b.building_number}`,
+            href: `/buildings/${b.id}`,
+          })),
 
-        ...allSpareParts.map((p: any) => ({
-          type: 'spare_part' as const,
-          id: p.id,
-          title: p.part_name,
-          subtitle: [
-            p.part_number,
-            departmentNames[p.department_id],
-          ]
-            .filter(Boolean)
-            .join(' · '),
+          ...(equipment ?? []).map((e: any) => ({
+            type: 'equipment' as const,
+            id: e.id,
+            title: e.name,
+            subtitle: [
+              e.asset_id,
+              e.manufacturer,
+            ]
+              .filter(Boolean)
+              .join(' · '),
+            href: `/equipment/${e.id}`,
+          })),
 
-          href: IS_MANAGEMENT_SITE
-            ? '/management'
-            : '/spare-parts',
-        })),
-      ];
+          ...(faults ?? []).map((f: any) => ({
+            type: 'fault' as const,
+            id: f.id,
+            title: f.fault_number,
+            subtitle: f.description,
+            href: '/faults',
+          })),
 
-      setResults(combined);
-      setSearching(false);
-      setOpen(true);
+          ...(spareParts ?? []).map((p: any) => ({
+            type: 'spare_part' as const,
+            id: p.id,
+            title: p.part_name,
+            subtitle: p.part_number ?? '',
+            href: '/spare-parts',
+          })),
+        ];
+
+        setResults(combined);
+        setOpen(true);
+      } catch (error) {
+        console.error('Search error:', error);
+
+        setResults([]);
+        setOpen(true);
+      } finally {
+        setSearching(false);
+      }
     }, 300);
 
     return () => clearTimeout(timeout);
-  }, [query, departmentIds, departmentNames]);
+  }, [query, departmentIds]);
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -343,9 +330,11 @@ export default function Header({
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          onFocus={() =>
-            results.length > 0 && setOpen(true)
-          }
+          onFocus={() => {
+            if (results.length > 0) {
+              setOpen(true);
+            }
+          }}
           placeholder={
             IS_MANAGEMENT_SITE
               ? 'ابحث في جميع الأقسام...'
@@ -359,7 +348,7 @@ export default function Header({
         )}
 
         {open && query.trim().length >= 2 && (
-          <div className="absolute z-40 mt-2 w-full rounded-xl border border-gray-100 bg-white p-2 shadow-xl">
+          <div className="absolute z-40 mt-2 max-h-[450px] w-full overflow-y-auto rounded-xl border border-gray-100 bg-white p-2 shadow-xl">
             {results.length === 0 && !searching ? (
               <p className="px-3 py-4 text-center text-sm text-gray-400">
                 لا توجد نتائج مطابقة لـ &quot;
@@ -367,13 +356,15 @@ export default function Header({
                 &quot;
               </p>
             ) : (
-              results.map((r) => {
-                const Icon = icons[r.type];
+              results.map((result) => {
+                const Icon = icons[result.type];
 
                 return (
                   <Link
-                    key={r.type + r.id}
-                    href={r.href}
+                    key={
+                      result.type + result.id
+                    }
+                    href={result.href}
                     onClick={() => {
                       setOpen(false);
                       setQuery('');
@@ -386,11 +377,11 @@ export default function Header({
 
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-gray-800">
-                        {r.title}
+                        {result.title}
                       </p>
 
                       <p className="truncate text-xs text-gray-400">
-                        {r.subtitle}
+                        {result.subtitle}
                       </p>
                     </div>
                   </Link>
@@ -419,7 +410,9 @@ export default function Header({
 
           {notifCount > 0 && (
             <span className="absolute -top-0.5 -left-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] text-white">
-              {notifCount > 9 ? '9+' : notifCount}
+              {notifCount > 9
+                ? '9+'
+                : notifCount}
             </span>
           )}
         </Link>
