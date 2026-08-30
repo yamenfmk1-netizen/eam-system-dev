@@ -68,15 +68,18 @@ const EQUIPMENT_TYPE_LABELS_DYNAMIC: Record<string, string> = {
   pdm: 'PDM',
   other: 'أخرى',
 
-  // HVAC
-  chiller: 'Chillers',
-  ahu: 'AHU',
-  fcu: 'FCU',
-  package_unit: 'Package Units',
-  split_unit: 'Split Units',
-  cooling_tower: 'Cooling Towers',
-  exhaust_fan: 'Exhaust Fans',
-  crah: 'CRAH',
+// HVAC
+chiller: 'Chillers',
+ahu: 'AHU',
+oau: 'OAU',
+fcu: 'FCU',
+package_unit: 'Package Units',
+split_unit: 'Split Units',
+cooling_tower: 'Cooling Towers',
+exhaust_fan: 'Exhaust Fans',
+supply_fan: 'Supply Fans',
+crah: 'CRAH',
+crac: 'CRAC',
 
   // Mechanical / common future types
   pump: 'المضخات',
