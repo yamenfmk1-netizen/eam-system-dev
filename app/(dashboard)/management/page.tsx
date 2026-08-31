@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import StatCard from '@/components/ui/StatCard';
+import DepartmentMetricsPanel from '@/components/dashboard/DepartmentMetricsPanel';
 import { DepartmentPerformanceChart, MonthlyFaultTrendChart } from '@/components/dashboard/DashboardCharts';
 import {
   AlertTriangle,
@@ -1201,200 +1202,20 @@ export default async function ManagementPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                <div className="rounded-xl bg-gray-50 p-4">
-                  <p className="text-xs text-gray-500">الأصول</p>
-                  <p className="mt-1 text-xl font-bold">
-                    {department.totalAssets}
-                  </p>
-                </div>
-
-                <details className="group rounded-xl bg-gray-50 transition open:col-span-2 open:bg-red-50/60 md:open:col-span-4">
-                  <summary className="cursor-pointer list-none p-4">
-                    <p className="text-xs text-gray-500">
-                      الأعطال المفتوحة
-                    </p>
-                    <p className="mt-1 text-xl font-bold text-gray-900">
-                      {department.openFaults}
-                    </p>
-                  </summary>
-                  <div className="border-t border-red-100 px-4 pb-4 pt-3">
-                    {department.openFaultItems.length === 0 ? (
-                      <p className="text-sm text-gray-500">
-                        لا توجد أعطال مفتوحة.
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        {department.openFaultItems.map((fault: any) => (
-                          <div key={fault.id} className="rounded-lg bg-white p-3">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <span className="font-medium text-gray-900" dir="ltr">
-                                {fault.number}
-                              </span>
-                              <span className="text-xs text-gray-500">
-                                {fault.buildingLabel} · {fault.equipmentName}
-                              </span>
-                            </div>
-                            <p className="mt-1 text-sm text-gray-600">
-                              {fault.description}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </details>
-
-                <div className="rounded-xl bg-gray-50 p-4">
-                  <p className="text-xs text-gray-500">
-                    PM Completion
-                  </p>
-                  <p className="mt-1 text-xl font-bold">
-                    {department.pmCompletion === null
-                      ? '—'
-                      : `${department.pmCompletion}%`}
-                  </p>
-                </div>
-
-                <div className="rounded-xl bg-gray-50 p-4">
-                  <p className="text-xs text-gray-500">
-                    Corrective Completion
-                  </p>
-                  <p className="mt-1 text-xl font-bold">
-                    {department.correctiveCompletion === null
-                      ? '—'
-                      : `${department.correctiveCompletion}%`}
-                  </p>
-                </div>
-
-                <div className="rounded-xl bg-gray-50 p-4">
-                  <p className="text-xs text-gray-500">MTTR</p>
-                  <p className="mt-1 text-xl font-bold">
-                    {department.mttrHours === null
-                      ? '—'
-                      : `${department.mttrHours} س`}
-                  </p>
-                </div>
-
-                <details className="group rounded-xl bg-gray-50 transition open:col-span-2 open:bg-amber-50/60 md:open:col-span-4">
-                  <summary className="cursor-pointer list-none p-4">
-                    <p className="text-xs text-gray-500">
-                      أعطال متكررة
-                    </p>
-                    <p className="mt-1 text-xl font-bold text-gray-900">
-                      {department.repeatedFaultAssets}
-                    </p>
-                  </summary>
-                  <div className="border-t border-amber-100 px-4 pb-4 pt-3">
-                    {department.repeatedFaultItems.length === 0 ? (
-                      <p className="text-sm text-gray-500">
-                        لا توجد معدات بأعطال متكررة خلال آخر 90 يوم.
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        {department.repeatedFaultItems.map((item: any) => (
-                          <div
-                            key={item.id}
-                            className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-white p-3"
-                          >
-                            <div>
-                              <p className="font-medium text-gray-900">
-                                {item.name}
-                              </p>
-                              <p className="mt-0.5 text-xs text-gray-500">
-                                {item.buildingLabel} · {item.assetId}
-                              </p>
-                            </div>
-                            <span className="text-lg font-bold text-amber-700">
-                              {item.count} أعطال
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </details>
-
-                <details className="group rounded-xl bg-gray-50 transition open:col-span-2 open:bg-amber-50/60 md:open:col-span-4">
-                  <summary className="cursor-pointer list-none p-4">
-                    <p className="text-xs text-gray-500">
-                      صيانة متأخرة
-                    </p>
-                    <p className="mt-1 text-xl font-bold text-gray-900">
-                      {department.overdueMaintenance}
-                    </p>
-                  </summary>
-                  <div className="border-t border-amber-100 px-4 pb-4 pt-3">
-                    {department.overdueMaintenanceItems.length === 0 ? (
-                      <p className="text-sm text-gray-500">
-                        لا توجد صيانة متأخرة.
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        {department.overdueMaintenanceItems.map((item: any) => (
-                          <div key={item.id} className="rounded-lg bg-white p-3">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <span className="font-medium text-gray-900">
-                                {item.title}
-                              </span>
-                              <span className="text-xs font-medium text-red-600">
-                                {item.dueDate ?? '—'}
-                              </span>
-                            </div>
-                            <p className="mt-1 text-xs text-gray-500">
-                              {item.buildingLabel} · {item.equipmentName}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </details>
-
-                <details className="group rounded-xl bg-gray-50 transition open:col-span-2 open:bg-amber-50/60 md:open:col-span-4">
-                  <summary className="cursor-pointer list-none p-4">
-                    <p className="text-xs text-gray-500">
-                      نقص قطع الغيار
-                    </p>
-                    <p className="mt-1 text-xl font-bold text-gray-900">
-                      {department.lowStockParts}
-                    </p>
-                  </summary>
-                  <div className="border-t border-amber-100 px-4 pb-4 pt-3">
-                    {department.lowStockItems.length === 0 ? (
-                      <p className="text-sm text-gray-500">
-                        لا توجد قطع غيار منخفضة المخزون.
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        {department.lowStockItems.map((item: any) => (
-                          <div
-                            key={item.id}
-                            className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-white p-3"
-                          >
-                            <div>
-                              <p className="font-medium text-gray-900">
-                                {item.name}
-                              </p>
-                              <p className="mt-0.5 text-xs text-gray-500" dir="ltr">
-                                {item.partNumber}
-                              </p>
-                            </div>
-                            <div className="text-left text-sm">
-                              <p className="font-bold text-red-600">
-                                المتوفر: {item.available}
-                              </p>
-                              <p className="text-xs text-gray-500">
-                                الحد الأدنى: {item.minimum}
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </details>
-              </div>
+              <DepartmentMetricsPanel
+                totalAssets={department.totalAssets}
+                openFaults={department.openFaults}
+                pmCompletion={department.pmCompletion}
+                correctiveCompletion={department.correctiveCompletion}
+                mttrHours={department.mttrHours}
+                repeatedFaultAssets={department.repeatedFaultAssets}
+                overdueMaintenance={department.overdueMaintenance}
+                lowStockParts={department.lowStockParts}
+                openFaultItems={department.openFaultItems}
+                repeatedFaultItems={department.repeatedFaultItems}
+                overdueMaintenanceItems={department.overdueMaintenanceItems}
+                lowStockItems={department.lowStockItems}
+              />
             </div>
           ))}
         </div>
