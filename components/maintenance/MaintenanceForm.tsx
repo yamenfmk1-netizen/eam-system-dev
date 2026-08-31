@@ -16,6 +16,7 @@ interface FormValues {
   equipment_id: string;
   maintenance_type: string;
   category: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
   maintenance_date: string;
   work_description: string;
   problem_found: string;
@@ -57,6 +58,7 @@ export default function MaintenanceForm({
           equipment_id: record.equipment_id ?? '',
           maintenance_type: record.maintenance_type ?? '',
           category: record.category,
+          status: ((record as any).status ?? 'completed') as FormValues['status'],
           maintenance_date: record.maintenance_date,
           work_description: record.work_description ?? '',
           technician_name: record.technician_name ?? '',
@@ -65,7 +67,13 @@ export default function MaintenanceForm({
           repeat_enabled: false,
           repeat_every_days: '90',
         }
-      : { category: 'preventive', maintenance_date: new Date().toISOString().slice(0, 10), repeat_enabled: false, repeat_every_days: '90' },
+      : {
+          category: 'preventive',
+          status: 'completed',
+          maintenance_date: new Date().toISOString().slice(0, 10),
+          repeat_enabled: false,
+          repeat_every_days: '90',
+        },
   });
 
   const selectedBuilding = watch('building_id');
@@ -158,6 +166,7 @@ export default function MaintenanceForm({
         equipment_id: values.equipment_id || null,
         maintenance_type: values.maintenance_type,
         category: values.category,
+        status: values.status,
         maintenance_date: values.maintenance_date,
         work_description: values.work_description,
         problem_found: values.problem_found,
@@ -294,6 +303,18 @@ export default function MaintenanceForm({
             <select {...register('category')} className="input-field">
               <option value="preventive">وقائية</option>
               <option value="corrective">علاجية</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="label-field">
+              {lang === 'ar' ? 'حالة الصيانة' : 'Maintenance status'}
+            </label>
+            <select {...register('status')} className="input-field">
+              <option value="pending">{lang === 'ar' ? 'قيد الانتظار' : 'Pending'}</option>
+              <option value="in_progress">{lang === 'ar' ? 'جاري التنفيذ' : 'In progress'}</option>
+              <option value="completed">{lang === 'ar' ? 'مكتملة' : 'Completed'}</option>
+              <option value="cancelled">{lang === 'ar' ? 'ملغاة' : 'Cancelled'}</option>
             </select>
           </div>
 
