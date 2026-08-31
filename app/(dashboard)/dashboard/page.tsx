@@ -428,7 +428,7 @@ const secondaryReadiness =
 </p>
       </div>
 
-      {/* الصف الأول: أهم الأرقام التشغيلية */}
+      {/* الصف الأول: الحالة التشغيلية */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
         <StatCard label="إجمالي المباني" value={buildingsCount ?? 0} icon={Building2} />
         <StatCard
@@ -460,8 +460,8 @@ const secondaryReadiness =
         <StatCard label="الصيانة المتأخرة" value={overdueMaintenanceCount} icon={Wrench} tone={overdueMaintenanceCount > 0 ? 'warning' : 'success'} />
       </div>
 
-      {/* الصف الثاني: مؤشرات الجاهزية والمخزون والضمان */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-8">
+      {/* الصف الثاني: مؤشرات الأداء KPI */}
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
         <StatCard
   label={CURRENT_DASHBOARD_CONFIG.primaryReadinessLabel}
   value={primaryReadiness}
@@ -528,10 +528,28 @@ const secondaryReadiness =
           suffix={mttrHours === null ? undefined : ' ساعة'}
           icon={Gauge}
         />
+      </div>
 
-        <StatCard label="قطع غيار منخفضة المخزون" value={lowStockCount} icon={PackageX} tone={lowStockCount > 0 ? 'warning' : 'success'} />
-        <StatCard label="ضمانات منتهية" value={expiredWarrantyCount} icon={ShieldAlert} tone={expiredWarrantyCount > 0 ? 'danger' : 'success'} />
-        <StatCard label="ضمانات تنتهي خلال 30 يوم" value={expiringWarrantyCount} icon={CalendarClock} tone={expiringWarrantyCount > 0 ? 'warning' : 'success'} />
+      {/* الصف الثالث: المخزون والضمان */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatCard
+          label="قطع غيار منخفضة المخزون"
+          value={lowStockCount}
+          icon={PackageX}
+          tone={lowStockCount > 0 ? 'warning' : 'success'}
+        />
+        <StatCard
+          label="ضمانات منتهية"
+          value={expiredWarrantyCount}
+          icon={ShieldAlert}
+          tone={expiredWarrantyCount > 0 ? 'danger' : 'success'}
+        />
+        <StatCard
+          label="ضمانات تنتهي خلال 30 يوم"
+          value={expiringWarrantyCount}
+          icon={CalendarClock}
+          tone={expiringWarrantyCount > 0 ? 'warning' : 'success'}
+        />
       </div>
 
       {/* الرسوم */}
