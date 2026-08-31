@@ -6,7 +6,7 @@ import {
   IS_MANAGEMENT_SITE,
 } from '@/lib/site-config';
 import StatCard from '@/components/ui/StatCard';
-import { EquipmentStatusChart, FaultPriorityChart } from '@/components/dashboard/DashboardCharts';
+import { EquipmentStatusChart, FaultPriorityChart, MonthlyFaultTrendChart } from '@/components/dashboard/DashboardCharts';
 import {
   AlertTriangle,
   BatteryCharging,
@@ -88,6 +88,13 @@ export default async function DashboardPage() {
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 89);
   const ninetyDaysAgoStr = dateOnly(ninetyDaysAgo);
 
+  const sixMonthsStart = new Date(
+    todayDate.getFullYear(),
+    todayDate.getMonth() - 5,
+    1
+  );
+  const sixMonthsStartStr = dateOnly(sixMonthsStart);
+
   const in30 = new Date(todayDate);
   in30.setDate(in30.getDate() + 30);
   const in30Str = dateOnly(in30);
@@ -107,6 +114,7 @@ export default async function DashboardPage() {
     { data: correctiveRecords },
     { data: repairedFaults },
     { data: repeatedFaultRecords },
+    { data: monthlyFaultRecords },
   ] = await Promise.all([
     supabase
       .from('buildings')
@@ -207,6 +215,14 @@ export default async function DashboardPage() {
       .eq('department_id', departmentId)
       .not('equipment_id', 'is', null)
       .gte('reported_at', `${ninetyDaysAgoStr}T00:00:00`)
+      .lte('reported_at', todayDate.toISOString()),
+
+    // جميع الأعطال خلال آخر 6 أشهر لعرض الاتجاه الشهري.
+    supabase
+      .from('faults')
+      .select('id,reported_at')
+      .eq('department_id', departmentId)
+      .gte('reported_at', `${sixMonthsStartStr}T00:00:00`)
       .lte('reported_at', todayDate.toISOString()),
   ]);
 
@@ -309,6 +325,44 @@ const secondaryReadiness =
   const repeatedFaultAssetsCount = Array.from(faultCountByEquipment.values()).filter(
     (count) => count >= 2
   ).length;
+
+  // Monthly Fault Trend — آخر 6 أشهر بما فيها الشهر الحالي.
+  const monthlyFaultCountMap = new Map<string, number>();
+  for (const fault of monthlyFaultRecords ?? []) {
+    if (!fault.reported_at) continue;
+    const faultDate = new Date(fault.reported_at);
+    const key = `${faultDate.getFullYear()}-${String(faultDate.getMonth() + 1).padStart(2, '0')}`;
+    monthlyFaultCountMap.set(key, (monthlyFaultCountMap.get(key) ?? 0) + 1);
+  }
+
+  const monthNamesAr = [
+    'يناير',
+    'فبراير',
+    'مارس',
+    'أبريل',
+    'مايو',
+    'يونيو',
+    'يوليو',
+    'أغسطس',
+    'سبتمبر',
+    'أكتوبر',
+    'نوفمبر',
+    'ديسمبر',
+  ];
+
+  const monthlyFaultTrendData = Array.from({ length: 6 }, (_, index) => {
+    const monthDate = new Date(
+      todayDate.getFullYear(),
+      todayDate.getMonth() - 5 + index,
+      1
+    );
+    const key = `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, '0')}`;
+
+    return {
+      month: monthNamesAr[monthDate.getMonth()],
+      count: monthlyFaultCountMap.get(key) ?? 0,
+    };
+  });
 
   const faultByBuilding = new Map<string, { total: number; critical: number }>();
   for (const fault of openFaults ?? []) {
@@ -490,6 +544,14 @@ const secondaryReadiness =
           <h2 className="mb-2 font-bold text-gray-900">توزيع حالة المعدات</h2>
           <EquipmentStatusChart data={statusData} />
         </div>
+      </div>
+
+      <div className="card">
+        <div className="mb-3">
+          <h2 className="font-bold text-gray-900">اتجاه الأعطال الشهري</h2>
+          <p className="mt-0.5 text-xs text-gray-400">إجمالي الأعطال المسجلة خلال آخر 6 أشهر</p>
+        </div>
+        <MonthlyFaultTrendChart data={monthlyFaultTrendData} />
       </div>
 
       {/* المباني حسب الأولوية + الاختبارات القادمة */}
