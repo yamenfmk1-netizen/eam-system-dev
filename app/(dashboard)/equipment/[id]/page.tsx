@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { IS_MANAGEMENT_SITE } from '@/lib/site-config';
 import StatusBadge from '@/components/ui/StatusBadge';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import EquipmentForm from '@/components/equipment/EquipmentForm';
@@ -11,7 +12,7 @@ import {
   EQUIPMENT_TYPE_LABELS, EQUIPMENT_STATUS_LABELS, TEST_TYPE_LABELS, TEST_RESULT_LABELS,
   MAINTENANCE_CATEGORY_LABELS, FAULT_STATUS_LABELS, FAULT_PRIORITY_LABELS, ATTACHMENT_CATEGORY_LABELS,
 } from '@/types/database.types';
-import type { Building, Equipment } from '@/types/database.types';
+import type { Building, Equipment, UserRole } from '@/types/database.types';
 import toast from 'react-hot-toast';
 import PrivateFileLink from '@/components/ui/PrivateFileLink';
 import { FileText, Eye, Download } from 'lucide-react';
@@ -24,12 +25,15 @@ export default function EquipmentDetailsPage() {
   const [equipment, setEquipment] = useState<Equipment | null>(null);
   const [buildingName, setBuildingName] = useState('');
   const [stationName, setStationName] = useState('');
+  const [departmentName, setDepartmentName] = useState('');
+  const [equipmentTypeName, setEquipmentTypeName] = useState('');
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [typeDetails, setTypeDetails] = useState<Record<string, any> | null>(null);
   const [tests, setTests] = useState<any[]>([]);
   const [maintenance, setMaintenance] = useState<any[]>([]);
   const [faults, setFaults] = useState<any[]>([]);
   const [attachments, setAttachments] = useState<any[]>([]);
+  const [role, setRole] = useState<UserRole>('viewer');
   const [loading, setLoading] = useState(true);
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
@@ -37,19 +41,87 @@ export default function EquipmentDetailsPage() {
 
   async function load() {
     setLoading(true);
-    const [{ data: eq }, { data: b }, { data: t }, { data: m }, { data: f }, { data: att }] = await Promise.all([
-      supabase.from('equipment').select('*, buildings(name, station)').eq('id', id).single(),
-      supabase.from('buildings').select('*').is('deleted_at', null).order('building_number'),
-      supabase.from('tests').select('*').eq('equipment_id', id).order('test_date', { ascending: false }),
-      supabase.from('maintenance_records').select('*').eq('equipment_id', id).order('maintenance_date', { ascending: false }),
-      supabase.from('faults').select('*').eq('equipment_id', id).order('reported_at', { ascending: false }),
-      supabase.from('attachments').select('*').eq('equipment_id', id).order('created_at', { ascending: false }),
-    ]);
 
-    if (eq) {
-      setEquipment(eq);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      const profilePromise = user
+        ? supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle()
+        : Promise.resolve({ data: null } as any);
+
+      const [
+        { data: eq, error: equipmentError },
+        { data: b },
+        { data: t },
+        { data: m },
+        { data: f },
+        { data: att },
+        { data: profile },
+      ] = await Promise.all([
+        supabase
+          .from('equipment')
+          .select('*, buildings(name, station)')
+          .eq('id', id)
+          .is('deleted_at', null)
+          .single(),
+
+        supabase
+          .from('buildings')
+          .select('*')
+          .is('deleted_at', null)
+          .order('building_number'),
+
+        supabase
+          .from('tests')
+          .select('*')
+          .eq('equipment_id', id)
+          .order('test_date', { ascending: false }),
+
+        supabase
+          .from('maintenance_records')
+          .select('*')
+          .eq('equipment_id', id)
+          .order('maintenance_date', { ascending: false }),
+
+        supabase
+          .from('faults')
+          .select('*')
+          .eq('equipment_id', id)
+          .order('reported_at', { ascending: false }),
+
+        supabase
+          .from('attachments')
+          .select('*')
+          .eq('equipment_id', id)
+          .order('created_at', { ascending: false }),
+
+        profilePromise,
+      ]);
+
+      if (equipmentError || !eq) {
+        setEquipment(null);
+        setBuildings(b ?? []);
+        setTests([]);
+        setMaintenance([]);
+        setFaults([]);
+        setAttachments([]);
+        setRole((profile?.role as UserRole) ?? 'viewer');
+        return;
+      }
+
+      setEquipment(eq as Equipment);
       setBuildingName((eq as any).buildings?.name ?? '');
       setStationName((eq as any).buildings?.station ?? '');
+      setRole((profile?.role as UserRole) ?? 'viewer');
+
+      const equipmentDepartmentId = (eq as any).department_id as string | null;
+      const equipmentTypeCode = String((eq as any).type ?? '');
 
       const detailTables: Record<string, string> = {
         generator: 'generators',
@@ -57,23 +129,74 @@ export default function EquipmentDetailsPage() {
         ups: 'ups_units',
         transformer: 'transformers',
       };
-      const detailTable = detailTables[String(eq.type)] ?? 'equipment_specs';
-      const { data: details } = await supabase.from(detailTable).select('*').eq('equipment_id', id).maybeSingle();
+
+      const detailTable =
+        detailTables[equipmentTypeCode] ?? 'equipment_specs';
+
+      const departmentPromise = equipmentDepartmentId
+        ? supabase
+            .from('departments')
+            .select('name')
+            .eq('id', equipmentDepartmentId)
+            .maybeSingle()
+        : Promise.resolve({ data: null } as any);
+
+      const equipmentTypePromise =
+        equipmentDepartmentId && equipmentTypeCode
+          ? supabase
+              .from('equipment_types')
+              .select('name')
+              .eq('department_id', equipmentDepartmentId)
+              .eq('code', equipmentTypeCode)
+              .maybeSingle()
+          : Promise.resolve({ data: null } as any);
+
+      const [
+        { data: department },
+        { data: equipmentType },
+        { data: details },
+      ] = await Promise.all([
+        departmentPromise,
+        equipmentTypePromise,
+        supabase
+          .from(detailTable)
+          .select('*')
+          .eq('equipment_id', id)
+          .maybeSingle(),
+      ]);
+
+      setDepartmentName(department?.name ?? '');
+      setEquipmentTypeName(equipmentType?.name ?? '');
       setTypeDetails(details);
+
+      setBuildings(b ?? []);
+      setTests(t ?? []);
+      setMaintenance(m ?? []);
+      setFaults(f ?? []);
+      setAttachments(att ?? []);
+    } catch (error: any) {
+      console.error(error);
+
+      toast.error(
+        error?.message ??
+          'تعذر تحميل بيانات المعدة'
+      );
+    } finally {
+      setLoading(false);
     }
-    setBuildings(b ?? []);
-    setTests(t ?? []);
-    setMaintenance(m ?? []);
-    setFaults(f ?? []);
-    setAttachments(att ?? []);
-    setLoading(false);
   }
+
 
   useEffect(() => {
     if (id) load();
   }, [id]);
 
+  const canEdit = role !== 'viewer';
+  const canDelete = role === 'admin' || role === 'engineer';
+
   async function handleDelete() {
+    if (!canDelete) return;
+
     setDeleting(true);
     // Soft Delete بدل الحذف النهائي
     const { error } = await supabase
@@ -113,13 +236,39 @@ export default function EquipmentDetailsPage() {
             />
           </div>
           <p className="text-sm text-gray-500">
-            {equipment.asset_id} · {EQUIPMENT_TYPE_LABELS[equipment.type]} · {stationName || 'غير محدد'} · {buildingName}
+            {equipment.asset_id} · {equipmentTypeName || EQUIPMENT_TYPE_LABELS[equipment.type] || equipment.type} · {stationName || 'غير محدد'} · {buildingName}
           </p>
+
+          {IS_MANAGEMENT_SITE && departmentName && (
+            <span className="mt-2 inline-flex rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+              {departmentName}
+            </span>
+          )}
         </div>
-        <div className="flex gap-2">
-          <button onClick={() => setShowEdit(true)} className="btn-secondary"><Pencil className="h-4 w-4" /> تعديل</button>
-          <button onClick={() => setShowDelete(true)} className="btn-danger"><Trash2 className="h-4 w-4" /> حذف</button>
-        </div>
+
+        {(canEdit || canDelete) && (
+          <div className="flex gap-2">
+            {canEdit && (
+              <button
+                onClick={() => setShowEdit(true)}
+                className="btn-secondary"
+              >
+                <Pencil className="h-4 w-4" />
+                تعديل
+              </button>
+            )}
+
+            {canDelete && (
+              <button
+                onClick={() => setShowDelete(true)}
+                className="btn-danger"
+              >
+                <Trash2 className="h-4 w-4" />
+                حذف
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -244,14 +393,20 @@ export default function EquipmentDetailsPage() {
         </div>
       </div>
 
-      {showEdit && (
-        <EquipmentForm equipment={equipment} buildings={buildings} typeDetails={typeDetails} onClose={() => setShowEdit(false)} onSaved={load} />
+      {canEdit && showEdit && (
+        <EquipmentForm
+          equipment={equipment}
+          buildings={buildings}
+          typeDetails={typeDetails}
+          onClose={() => setShowEdit(false)}
+          onSaved={load}
+        />
       )}
 
       <ConfirmDialog
         open={showDelete}
         title="حذف المعدة"
-        message={`هل أنت متأكد من حذف "${equipment.name}"؟ سيتم حذف جميع السجلات المرتبطة بها.`}
+        message={`هل أنت متأكد من حذف "${equipment.name}"؟ سيتم إخفاء المعدة من النظام، مع بقاء السجلات المرتبطة بها محفوظة.`}
         onConfirm={handleDelete}
         onCancel={() => setShowDelete(false)}
         loading={deleting}
