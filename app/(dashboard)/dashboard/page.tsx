@@ -100,6 +100,7 @@ export default async function DashboardPage() {
     { data: maintenanceFallback },
     { data: pmRecords },
     { data: correctiveRecords },
+    { data: repairedFaults },
   ] = await Promise.all([
     supabase
       .from('buildings')
@@ -183,6 +184,15 @@ export default async function DashboardPage() {
       .eq('category', 'corrective')
       .gte('maintenance_date', monthStart)
       .lte('maintenance_date', today),
+
+    // الأعطال التي تم إغلاقها خلال الشهر الحالي لاستخدامها في حساب MTTR
+    supabase
+      .from('faults')
+      .select('id,repair_time_minutes,closed_at')
+      .eq('department_id', departmentId)
+      .not('closed_at', 'is', null)
+      .gte('closed_at', `${monthStart}T00:00:00`)
+      .lte('closed_at', todayDate.toISOString()),
   ]);
 
   const primaryTotal = primaryAssets?.length ?? 0;
@@ -253,6 +263,22 @@ const secondaryReadiness =
     correctiveDueCount > 0
       ? Math.round((correctiveCompletedCount / correctiveDueCount) * 100)
       : null;
+
+  // MTTR للشهر الحالي:
+  // متوسط وقت الإصلاح الفعلي للأعطال المغلقة التي لديها repair_time_minutes.
+  const repairDurations = (repairedFaults ?? [])
+    .map((fault: any) => Number(fault.repair_time_minutes))
+    .filter((minutes: number) => Number.isFinite(minutes) && minutes >= 0);
+
+  const mttrMinutes =
+    repairDurations.length > 0
+      ? repairDurations.reduce((sum: number, minutes: number) => sum + minutes, 0) / repairDurations.length
+      : null;
+
+  const mttrHours =
+    mttrMinutes === null
+      ? null
+      : Math.round((mttrMinutes / 60) * 10) / 10;
 
   const faultByBuilding = new Map<string, { total: number; critical: number }>();
   for (const fault of openFaults ?? []) {
@@ -339,7 +365,7 @@ const secondaryReadiness =
       </div>
 
       {/* الصف الثاني: مؤشرات الجاهزية والمخزون والضمان */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-7">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-8">
         <StatCard
   label={CURRENT_DASHBOARD_CONFIG.primaryReadinessLabel}
   value={primaryReadiness}
@@ -398,6 +424,13 @@ const secondaryReadiness =
                   ? 'warning'
                   : 'danger'
           }
+        />
+
+        <StatCard
+          label="متوسط وقت الإصلاح (MTTR)"
+          value={mttrHours ?? '—'}
+          suffix={mttrHours === null ? undefined : ' ساعة'}
+          icon={Gauge}
         />
 
         <StatCard label="قطع غيار منخفضة المخزون" value={lowStockCount} icon={PackageX} tone={lowStockCount > 0 ? 'warning' : 'success'} />
