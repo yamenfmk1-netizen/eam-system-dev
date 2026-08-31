@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { DEPARTMENT_CODE } from '@/lib/site-config';
+import {
+  DEPARTMENT_CODE,
+  IS_MANAGEMENT_SITE,
+} from '@/lib/site-config';
 import MaintenanceForm from '@/components/maintenance/MaintenanceForm';
 import ScheduleForm from '@/components/maintenance/ScheduleForm';
 import StatusBadge from '@/components/ui/StatusBadge';
@@ -12,6 +15,12 @@ import type { Building, MaintenanceRecord, MaintenanceSchedule } from '@/types/d
 import { useLanguage } from '@/lib/i18n/context';
 import type { TranslationKey } from '@/lib/i18n/dictionary';
 import toast from 'react-hot-toast';
+
+type DepartmentOption = {
+  id: string;
+  name: string;
+  code: string;
+};
 
 const FREQ_KEYS: Record<string, TranslationKey> = {
   days: 'schedule.days',
@@ -34,6 +43,9 @@ export default function MaintenancePage() {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
 
+  const [departments, setDepartments] = useState<DepartmentOption[]>([]);
+  const [departmentFilter, setDepartmentFilter] = useState('all');
+
   const [showForm, setShowForm] = useState(false);
   const [editingRecord, setEditingRecord] = useState<MaintenanceRecord | undefined>(undefined);
   const [deleteRecord, setDeleteRecord] = useState<any | null>(null);
@@ -45,58 +57,163 @@ export default function MaintenancePage() {
   const [busy, setBusy] = useState(false);
   const [generating, setGenerating] = useState(false);
 
- async function loadData() {
-  setLoading(true);
+  async function loadData() {
+    setLoading(true);
 
-  const { data: department } = await supabase
-    .from('departments')
-    .select('id')
-    .eq('code', DEPARTMENT_CODE)
-    .single();
-
-  if (!department) {
-    setRecords([]);
-    setSchedules([]);
-    setBuildings([]);
-    setLoading(false);
-    return;
-  }
-
-  const [{ data: m }, { data: s }, { data: b }] = await Promise.all([
-    supabase
+    let recordsQuery = supabase
       .from('maintenance_records')
       .select('*, buildings(name), equipment(name, asset_id)')
-      .eq('department_id', department.id)
-      .order('maintenance_date', { ascending: false }),
+      .order('maintenance_date', { ascending: false });
 
-    supabase
+    let schedulesQuery = supabase
       .from('maintenance_schedules')
       .select('*, buildings(name), equipment(name, asset_id)')
-      .eq('department_id', department.id)
-      .order('next_due_date'),
+      .order('next_due_date');
 
-    supabase
-      .from('buildings')
-      .select('*')
-      .is('deleted_at', null)
-      .order('building_number'),
-  ]);
+    if (IS_MANAGEMENT_SITE) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-  setRecords(m ?? []);
-  setSchedules(s ?? []);
-  setBuildings((b ?? []) as Building[]);
-  setLoading(false);
-}
+      if (!user) {
+        setRecords([]);
+        setSchedules([]);
+        setBuildings([]);
+        setDepartments([]);
+        setLoading(false);
+        return;
+      }
+
+      const {
+        data: userDepartments,
+        error: userDepartmentsError,
+      } = await supabase
+        .from('user_departments')
+        .select('department_id')
+        .eq('user_id', user.id);
+
+      if (userDepartmentsError) {
+        console.error(
+          'Error loading user departments:',
+          userDepartmentsError
+        );
+
+        setRecords([]);
+        setSchedules([]);
+        setBuildings([]);
+        setDepartments([]);
+        setLoading(false);
+        return;
+      }
+
+      const departmentIds = Array.from(
+        new Set(
+          (userDepartments ?? [])
+            .map((item) => item.department_id)
+            .filter((id): id is string => Boolean(id))
+        )
+      );
+
+      if (departmentIds.length > 0) {
+        const {
+          data: allowedDepartments,
+          error: departmentsError,
+        } = await supabase
+          .from('departments')
+          .select('id,name,code')
+          .in('id', departmentIds)
+          .order('name');
+
+        if (departmentsError) {
+          console.error(
+            'Error loading departments:',
+            departmentsError
+          );
+
+          setDepartments([]);
+        } else {
+          setDepartments(
+            (allowedDepartments ?? []) as DepartmentOption[]
+          );
+        }
+      } else {
+        setDepartments([]);
+      }
+    } else {
+      const { data: department } = await supabase
+        .from('departments')
+        .select('id')
+        .eq('code', DEPARTMENT_CODE)
+        .single();
+
+      if (!department) {
+        setRecords([]);
+        setSchedules([]);
+        setBuildings([]);
+        setLoading(false);
+        return;
+      }
+
+      recordsQuery = recordsQuery.eq(
+        'department_id',
+        department.id
+      );
+
+      schedulesQuery = schedulesQuery.eq(
+        'department_id',
+        department.id
+      );
+    }
+
+    const [{ data: m }, { data: s }, { data: b }] =
+      await Promise.all([
+        recordsQuery,
+        schedulesQuery,
+        supabase
+          .from('buildings')
+          .select('*')
+          .is('deleted_at', null)
+          .order('building_number'),
+      ]);
+
+    setRecords(m ?? []);
+    setSchedules(s ?? []);
+    setBuildings((b ?? []) as Building[]);
+    setLoading(false);
+  }
+
   useEffect(() => { loadData(); }, []);
 
   const filtered = records.filter((r) => {
     const q = search.toLowerCase();
+
     const matchesSearch =
       r.maintenance_number.toLowerCase().includes(q) ||
       (r.buildings?.name ?? '').toLowerCase().includes(q) ||
       (r.equipment?.name ?? '').toLowerCase().includes(q);
-    const matchesCategory = categoryFilter === 'all' || r.category === categoryFilter;
-    return matchesSearch && matchesCategory;
+
+    const matchesCategory =
+      categoryFilter === 'all' ||
+      r.category === categoryFilter;
+
+    const matchesDepartment =
+      !IS_MANAGEMENT_SITE ||
+      departmentFilter === 'all' ||
+      r.department_id === departmentFilter;
+
+    return (
+      matchesSearch &&
+      matchesCategory &&
+      matchesDepartment
+    );
+  });
+
+  const filteredSchedules = schedules.filter((s) => {
+    return (
+      !IS_MANAGEMENT_SITE ||
+      departmentFilter === 'all' ||
+      s.department_id === departmentFilter
+    );
   });
 
   async function handleDeleteRecord() {
@@ -179,9 +296,30 @@ export default function MaintenancePage() {
           className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition ${tab === 'schedules' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
         >
           <Repeat className="h-4 w-4" /> {t('maintenance.tabSchedules')}
-          {schedules.length > 0 && <span className="rounded-full bg-gray-200 px-2 text-xs text-gray-600">{schedules.length}</span>}
+          {filteredSchedules.length > 0 && <span className="rounded-full bg-gray-200 px-2 text-xs text-gray-600">{filteredSchedules.length}</span>}
         </button>
       </div>
+
+      {IS_MANAGEMENT_SITE && (
+        <div className="flex justify-end">
+          <select
+            value={departmentFilter}
+            onChange={(e) => setDepartmentFilter(e.target.value)}
+            className="input-field sm:w-56"
+          >
+            <option value="all">جميع الإدارات</option>
+
+            {departments.map((department) => (
+              <option
+                key={department.id}
+                value={department.id}
+              >
+                {department.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {tab === 'records' ? (
         <>
@@ -267,7 +405,7 @@ export default function MaintenancePage() {
         <div className="card overflow-x-auto p-0">
           {loading ? (
             <div className="flex justify-center py-16 text-gray-400"><Loader2 className="h-6 w-6 animate-spin" /></div>
-          ) : schedules.length === 0 ? (
+          ) : filteredSchedules.length === 0 ? (
             <div className="py-16 text-center text-sm text-gray-400">{t('schedule.empty')}</div>
           ) : (
             <table className="w-full text-sm">
@@ -284,7 +422,7 @@ export default function MaintenancePage() {
                 </tr>
               </thead>
               <tbody>
-                {schedules.map((s) => {
+                {filteredSchedules.map((s) => {
                   const overdue = s.is_active && s.next_due_date <= today;
                   return (
                     <tr key={s.id} className="border-b border-gray-50 hover:bg-gray-50">
