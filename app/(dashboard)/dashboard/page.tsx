@@ -12,6 +12,7 @@ import {
   BatteryCharging,
   Building2,
   CalendarClock,
+  ClipboardCheck,
   Gauge,
   PackageX,
   ShieldAlert,
@@ -79,6 +80,9 @@ export default async function DashboardPage() {
 
   const todayDate = new Date();
   const today = dateOnly(todayDate);
+  const monthStart = dateOnly(
+    new Date(todayDate.getFullYear(), todayDate.getMonth(), 1)
+  );
   const in30 = new Date(todayDate);
   in30.setDate(in30.getDate() + 30);
   const in30Str = dateOnly(in30);
@@ -94,6 +98,7 @@ export default async function DashboardPage() {
     { data: upcomingTests },
     { data: schedules },
     { data: maintenanceFallback },
+    { data: pmRecords },
   ] = await Promise.all([
     supabase
       .from('buildings')
@@ -159,6 +164,15 @@ export default async function DashboardPage() {
       .eq('department_id', departmentId)
       .not('next_maintenance_date', 'is', null)
       .lt('next_maintenance_date', today),
+
+    // الصيانة الوقائية المستحقة من بداية الشهر حتى اليوم
+    supabase
+      .from('maintenance_records')
+      .select('id,status,category,maintenance_date')
+      .eq('department_id', departmentId)
+      .eq('category', 'preventive')
+      .gte('maintenance_date', monthStart)
+      .lte('maintenance_date', today),
   ]);
 
   const primaryTotal = primaryAssets?.length ?? 0;
@@ -205,6 +219,16 @@ const secondaryReadiness =
   // في حال جدول الجدولة موجود نستخدمه، وإلا نرجع لسجلات الصيانة القديمة.
   const overdueRows: any[] = schedules !== null ? schedules ?? [] : maintenanceFallback ?? [];
   const overdueMaintenanceCount = overdueRows.length;
+
+  // PM Completion % للشهر الحالي:
+  // المكتمل ÷ جميع أعمال الصيانة الوقائية المستحقة حتى اليوم، مع استبعاد الملغاة.
+  const pmDueRecords = (pmRecords ?? []).filter((record: any) => record.status !== 'cancelled');
+  const pmDueCount = pmDueRecords.length;
+  const pmCompletedCount = pmDueRecords.filter((record: any) => record.status === 'completed').length;
+  const pmCompletion =
+    pmDueCount > 0
+      ? Math.round((pmCompletedCount / pmDueCount) * 100)
+      : null;
 
   const faultByBuilding = new Map<string, { total: number; critical: number }>();
   for (const fault of openFaults ?? []) {
@@ -291,7 +315,7 @@ const secondaryReadiness =
       </div>
 
       {/* الصف الثاني: مؤشرات الجاهزية والمخزون والضمان */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
         <StatCard
   label={CURRENT_DASHBOARD_CONFIG.primaryReadinessLabel}
   value={primaryReadiness}
@@ -319,6 +343,23 @@ const secondaryReadiness =
         : 'danger'
   }
 />
+
+        <StatCard
+          label="إنجاز الصيانة الوقائية"
+          value={pmCompletion ?? '—'}
+          suffix={pmCompletion === null ? undefined : '%'}
+          icon={ClipboardCheck}
+          tone={
+            pmCompletion === null
+              ? 'default'
+              : pmCompletion >= 90
+                ? 'success'
+                : pmCompletion >= 75
+                  ? 'warning'
+                  : 'danger'
+          }
+        />
+
         <StatCard label="قطع غيار منخفضة المخزون" value={lowStockCount} icon={PackageX} tone={lowStockCount > 0 ? 'warning' : 'success'} />
         <StatCard label="ضمانات منتهية" value={expiredWarrantyCount} icon={ShieldAlert} tone={expiredWarrantyCount > 0 ? 'danger' : 'success'} />
         <StatCard label="ضمانات تنتهي خلال 30 يوم" value={expiringWarrantyCount} icon={CalendarClock} tone={expiringWarrantyCount > 0 ? 'warning' : 'success'} />
