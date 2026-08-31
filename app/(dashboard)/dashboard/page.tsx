@@ -99,6 +99,7 @@ export default async function DashboardPage() {
     { data: schedules },
     { data: maintenanceFallback },
     { data: pmRecords },
+    { data: correctiveRecords },
   ] = await Promise.all([
     supabase
       .from('buildings')
@@ -173,6 +174,15 @@ export default async function DashboardPage() {
       .eq('category', 'preventive')
       .gte('maintenance_date', monthStart)
       .lte('maintenance_date', today),
+
+    // الصيانة العلاجية المسجلة من بداية الشهر حتى اليوم
+    supabase
+      .from('maintenance_records')
+      .select('id,status,category,maintenance_date')
+      .eq('department_id', departmentId)
+      .eq('category', 'corrective')
+      .gte('maintenance_date', monthStart)
+      .lte('maintenance_date', today),
   ]);
 
   const primaryTotal = primaryAssets?.length ?? 0;
@@ -228,6 +238,20 @@ const secondaryReadiness =
   const pmCompletion =
     pmDueCount > 0
       ? Math.round((pmCompletedCount / pmDueCount) * 100)
+      : null;
+
+  // Corrective Maintenance Completion % للشهر الحالي:
+  // المكتمل ÷ جميع أعمال الصيانة العلاجية المسجلة، مع استبعاد الملغاة.
+  const correctiveDueRecords = (correctiveRecords ?? []).filter(
+    (record: any) => record.status !== 'cancelled'
+  );
+  const correctiveDueCount = correctiveDueRecords.length;
+  const correctiveCompletedCount = correctiveDueRecords.filter(
+    (record: any) => record.status === 'completed'
+  ).length;
+  const correctiveCompletion =
+    correctiveDueCount > 0
+      ? Math.round((correctiveCompletedCount / correctiveDueCount) * 100)
       : null;
 
   const faultByBuilding = new Map<string, { total: number; critical: number }>();
@@ -315,7 +339,7 @@ const secondaryReadiness =
       </div>
 
       {/* الصف الثاني: مؤشرات الجاهزية والمخزون والضمان */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-7">
         <StatCard
   label={CURRENT_DASHBOARD_CONFIG.primaryReadinessLabel}
   value={primaryReadiness}
@@ -355,6 +379,22 @@ const secondaryReadiness =
               : pmCompletion >= 90
                 ? 'success'
                 : pmCompletion >= 75
+                  ? 'warning'
+                  : 'danger'
+          }
+        />
+
+        <StatCard
+          label="إنجاز الصيانة العلاجية"
+          value={correctiveCompletion ?? '—'}
+          suffix={correctiveCompletion === null ? undefined : '%'}
+          icon={Wrench}
+          tone={
+            correctiveCompletion === null
+              ? 'default'
+              : correctiveCompletion >= 90
+                ? 'success'
+                : correctiveCompletion >= 75
                   ? 'warning'
                   : 'danger'
           }
