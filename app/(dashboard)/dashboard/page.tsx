@@ -15,6 +15,7 @@ import {
   ClipboardCheck,
   Gauge,
   PackageX,
+  RefreshCcw,
   ShieldAlert,
   ShieldCheck,
   Wrench,
@@ -83,6 +84,10 @@ export default async function DashboardPage() {
   const monthStart = dateOnly(
     new Date(todayDate.getFullYear(), todayDate.getMonth(), 1)
   );
+  const ninetyDaysAgo = new Date(todayDate);
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 89);
+  const ninetyDaysAgoStr = dateOnly(ninetyDaysAgo);
+
   const in30 = new Date(todayDate);
   in30.setDate(in30.getDate() + 30);
   const in30Str = dateOnly(in30);
@@ -101,6 +106,7 @@ export default async function DashboardPage() {
     { data: pmRecords },
     { data: correctiveRecords },
     { data: repairedFaults },
+    { data: repeatedFaultRecords },
   ] = await Promise.all([
     supabase
       .from('buildings')
@@ -193,6 +199,15 @@ export default async function DashboardPage() {
       .not('closed_at', 'is', null)
       .gte('closed_at', `${monthStart}T00:00:00`)
       .lte('closed_at', todayDate.toISOString()),
+
+    // الأعطال المسجلة خلال آخر 90 يوم لاكتشاف المعدات ذات الأعطال المتكررة
+    supabase
+      .from('faults')
+      .select('id,equipment_id,reported_at')
+      .eq('department_id', departmentId)
+      .not('equipment_id', 'is', null)
+      .gte('reported_at', `${ninetyDaysAgoStr}T00:00:00`)
+      .lte('reported_at', todayDate.toISOString()),
   ]);
 
   const primaryTotal = primaryAssets?.length ?? 0;
@@ -280,6 +295,21 @@ const secondaryReadiness =
       ? null
       : Math.round((mttrMinutes / 60) * 10) / 10;
 
+  // Repeated Faults:
+  // نعتبر المعدة ذات أعطال متكررة إذا سُجل عليها عطلان أو أكثر خلال آخر 90 يوم.
+  const faultCountByEquipment = new Map<string, number>();
+  for (const fault of repeatedFaultRecords ?? []) {
+    if (!fault.equipment_id) continue;
+    faultCountByEquipment.set(
+      fault.equipment_id,
+      (faultCountByEquipment.get(fault.equipment_id) ?? 0) + 1
+    );
+  }
+
+  const repeatedFaultAssetsCount = Array.from(faultCountByEquipment.values()).filter(
+    (count) => count >= 2
+  ).length;
+
   const faultByBuilding = new Map<string, { total: number; critical: number }>();
   for (const fault of openFaults ?? []) {
     const current = faultByBuilding.get(fault.building_id) ?? { total: 0, critical: 0 };
@@ -345,7 +375,7 @@ const secondaryReadiness =
       </div>
 
       {/* الصف الأول: أهم الأرقام التشغيلية */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
         <StatCard label="إجمالي المباني" value={buildingsCount ?? 0} icon={Building2} />
         <StatCard
   label={CURRENT_DASHBOARD_CONFIG.primaryLabel}
@@ -361,6 +391,18 @@ const secondaryReadiness =
   tone="success"
 />
         <StatCard label="الأعطال المفتوحة" value={openFaults?.length ?? 0} icon={AlertTriangle} tone="danger" />
+        <StatCard
+          label="معدات بأعطال متكررة (90 يوم)"
+          value={repeatedFaultAssetsCount}
+          icon={RefreshCcw}
+          tone={
+            repeatedFaultAssetsCount === 0
+              ? 'success'
+              : repeatedFaultAssetsCount <= 2
+                ? 'warning'
+                : 'danger'
+          }
+        />
         <StatCard label="الصيانة المتأخرة" value={overdueMaintenanceCount} icon={Wrench} tone={overdueMaintenanceCount > 0 ? 'warning' : 'success'} />
       </div>
 
