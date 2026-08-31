@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import StatCard from '@/components/ui/StatCard';
 import DepartmentMetricsPanel from '@/components/dashboard/DepartmentMetricsPanel';
+import ManagementAlertsPanel from '@/components/dashboard/ManagementAlertsPanel';
 import { DepartmentPerformanceChart, MonthlyFaultTrendChart } from '@/components/dashboard/DashboardCharts';
 import {
   AlertTriangle,
@@ -13,7 +14,6 @@ import {
   PackageX,
   RefreshCcw,
   ShieldAlert,
-  ShieldCheck,
   Wrench,
 } from 'lucide-react';
 
@@ -1221,106 +1221,13 @@ export default async function ManagementPage() {
         </div>
       </div>
 
-      {/* ملخص تنبيهات الإدارة */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard
-          label="إجمالي التنبيهات الإدارية"
-          value={managementAlerts.length}
-          icon={AlertTriangle}
-          tone={managementAlerts.length > 0 ? 'warning' : 'success'}
-        />
-        <StatCard
-          label="تنبيهات حرجة"
-          value={criticalManagementAlerts}
-          icon={ShieldAlert}
-          tone={criticalManagementAlerts > 0 ? 'danger' : 'success'}
-        />
-        <StatCard
-          label="تنبيهات عالية"
-          value={highManagementAlerts}
-          icon={AlertTriangle}
-          tone={highManagementAlerts > 0 ? 'warning' : 'success'}
-        />
-      </div>
-
-      {/* تنبيهات الإدارة مرتبة حسب الأولوية */}
-      <div className="rounded-2xl border bg-white p-6 shadow-sm">
-        <div className="mb-5 flex items-center gap-3">
-          <ShieldCheck className="h-6 w-6" />
-          <div>
-            <h2 className="text-xl font-bold text-gray-900">
-              تنبيهات تحتاج اهتمام الإدارة
-            </h2>
-            <p className="mt-1 text-sm text-gray-500">
-              مرتبة تلقائيًا من الأعلى خطورة إلى الأقل
-            </p>
-          </div>
-        </div>
-
-        {managementAlerts.length === 0 ? (
-          <p className="text-gray-500">
-            لا توجد تنبيهات إدارية حالياً.
-          </p>
-        ) : (
-          <div className="space-y-3">
-            {managementAlerts.map((alert, index) => (
-              <div
-                key={`${alert.departmentId}-${alert.title}-${index}`}
-                className={`flex items-start justify-between gap-4 rounded-xl border p-4 ${
-                  alert.severity === 'critical'
-                    ? 'border-red-200 bg-red-50/60'
-                    : alert.severity === 'high'
-                      ? 'border-amber-200 bg-amber-50/60'
-                      : 'border-gray-100 bg-gray-50'
-                }`}
-              >
-                <div className="flex min-w-0 items-start gap-3">
-                  <AlertTriangle
-                    className={`mt-0.5 h-5 w-5 shrink-0 ${
-                      alert.severity === 'critical'
-                        ? 'text-red-600'
-                        : alert.severity === 'high'
-                          ? 'text-amber-600'
-                          : 'text-gray-500'
-                    }`}
-                  />
-
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-bold text-gray-900">
-                        {alert.departmentName}
-                      </span>
-                      <span className="text-gray-300">•</span>
-                      <span className="font-medium text-gray-800">
-                        {alert.title}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-sm text-gray-600">
-                      {alert.detail}
-                    </p>
-                  </div>
-                </div>
-
-                <span
-                  className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
-                    alert.severity === 'critical'
-                      ? 'bg-red-100 text-red-700'
-                      : alert.severity === 'high'
-                        ? 'bg-amber-100 text-amber-700'
-                        : 'bg-gray-200 text-gray-700'
-                  }`}
-                >
-                  {alert.severity === 'critical'
-                    ? 'حرج'
-                    : alert.severity === 'high'
-                      ? 'عالي'
-                      : 'متوسط'}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* التنبيهات الإدارية — تفتح داخل نفس الصفحة */}
+      <ManagementAlertsPanel
+        alerts={managementAlerts}
+        totalCount={managementAlerts.length}
+        criticalCount={criticalManagementAlerts}
+        highCount={highManagementAlerts}
+      />
     </div>
   );
 }
