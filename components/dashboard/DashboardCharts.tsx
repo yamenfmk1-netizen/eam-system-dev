@@ -107,6 +107,77 @@ export function FaultPriorityChart({ data }: { data: { priority: string; count: 
   );
 }
 
+export function DepartmentPerformanceChart({
+  data,
+}: {
+  data: {
+    department: string;
+    readiness: number | null;
+    pmCompletion: number | null;
+    correctiveCompletion: number | null;
+  }[];
+}) {
+  if (data.length === 0) {
+    return (
+      <p className="py-14 text-center text-sm text-gray-400">
+        لا توجد أقسام متاحة للمقارنة
+      </p>
+    );
+  }
+
+  const chartData = data.map((item) => ({
+    department: item.department,
+    readiness: item.readiness ?? 0,
+    pmCompletion: item.pmCompletion ?? 0,
+    correctiveCompletion: item.correctiveCompletion ?? 0,
+  }));
+
+  const chartHeight = Math.max(320, chartData.length * 72);
+
+  return (
+    <ResponsiveContainer width="100%" height={chartHeight}>
+      <BarChart
+        data={chartData}
+        layout="vertical"
+        margin={{ top: 10, right: 20, left: 20, bottom: 0 }}
+      >
+        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+        <XAxis
+          type="number"
+          domain={[0, 100]}
+          allowDecimals={false}
+          fontSize={11}
+          tickFormatter={(value) => `${value}%`}
+        />
+        <YAxis
+          type="category"
+          dataKey="department"
+          width={120}
+          fontSize={12}
+        />
+        <Tooltip
+          formatter={(value: number, name: string) => {
+            const labels: Record<string, string> = {
+              readiness: 'الجاهزية',
+              pmCompletion: 'PM Completion',
+              correctiveCompletion: 'Corrective Completion',
+            };
+
+            return [`${value}%`, labels[name] ?? name];
+          }}
+        />
+        <Bar dataKey="readiness" fill="#16a34a" radius={[0, 4, 4, 0]} />
+        <Bar dataKey="pmCompletion" fill="#2f82ff" radius={[0, 4, 4, 0]} />
+        <Bar
+          dataKey="correctiveCompletion"
+          fill="#eab308"
+          radius={[0, 4, 4, 0]}
+        />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
 export function MonthlyFaultTrendChart({
   data,
 }: {
