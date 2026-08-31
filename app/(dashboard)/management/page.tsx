@@ -1,6 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
-import Link from 'next/link';
 import StatCard from '@/components/ui/StatCard';
 import { DepartmentPerformanceChart, MonthlyFaultTrendChart } from '@/components/dashboard/DashboardCharts';
 import {
@@ -143,20 +142,20 @@ export default async function ManagementPage() {
 
     supabase
       .from('faults')
-      .select('id,department_id,building_id,equipment_id,priority,status')
+      .select('id,fault_number,description,department_id,building_id,equipment_id,priority,status')
       .in('department_id', departmentIds)
       .in('status', OPEN_FAULT_STATUSES),
 
     supabase
       .from('maintenance_schedules')
-      .select('id,department_id,building_id,next_due_date,is_active')
+      .select('id,title,department_id,building_id,equipment_id,next_due_date,is_active')
       .in('department_id', departmentIds)
       .eq('is_active', true)
       .lt('next_due_date', today),
 
     supabase
       .from('maintenance_records')
-      .select('id,department_id,building_id,next_maintenance_date')
+      .select('id,maintenance_number,department_id,building_id,equipment_id,next_maintenance_date')
       .in('department_id', departmentIds)
       .not('next_maintenance_date', 'is', null)
       .lt('next_maintenance_date', today),
@@ -171,7 +170,7 @@ export default async function ManagementPage() {
     supabase
       .from('spare_parts')
       .select(
-        'id,department_id,quantity_available,minimum_stock,warranty_end_date'
+        'id,part_name,part_number,department_id,quantity_available,minimum_stock,warranty_end_date'
       )
       .in('department_id', departmentIds),
 
@@ -352,6 +351,94 @@ export default async function ManagementPage() {
       repeatedFaultCountByEquipment.values()
     ).filter((count) => count >= 2).length;
 
+    const openFaultItems = departmentOpenFaults.map((fault: any) => {
+      const equipmentItem: any = fault.equipment_id
+        ? (equipment ?? []).find((item: any) => item.id === fault.equipment_id)
+        : null;
+
+      const building = fault.building_id
+        ? buildingById.get(fault.building_id)
+        : null;
+
+      return {
+        id: fault.id,
+        number: fault.fault_number ?? '—',
+        description: fault.description ?? 'بدون وصف',
+        equipmentName: equipmentItem?.name ?? '—',
+        buildingLabel: building
+          ? building.buildingNumber
+            ? `مبنى ${building.buildingNumber}`
+            : building.name ?? '—'
+          : '—',
+        priority: fault.priority,
+      };
+    });
+
+    const overdueMaintenanceItems = (
+      useSchedules ? departmentSchedules : departmentFallback
+    ).map((item: any) => {
+      const equipmentItem: any = item.equipment_id
+        ? (equipment ?? []).find((equipmentItem: any) => equipmentItem.id === item.equipment_id)
+        : null;
+
+      const building = item.building_id
+        ? buildingById.get(item.building_id)
+        : null;
+
+      return {
+        id: item.id,
+        title: item.title ?? item.maintenance_number ?? 'صيانة',
+        dueDate: item.next_due_date ?? item.next_maintenance_date ?? null,
+        equipmentName: equipmentItem?.name ?? '—',
+        buildingLabel: building
+          ? building.buildingNumber
+            ? `مبنى ${building.buildingNumber}`
+            : building.name ?? '—'
+          : '—',
+      };
+    });
+
+    const lowStockItems = departmentParts
+      .filter((item: any) => {
+        const available = Number(item.quantity_available ?? 0);
+        const minimum = Number(item.minimum_stock ?? 0);
+        return available <= minimum;
+      })
+      .map((item: any) => ({
+        id: item.id,
+        name: item.part_name ?? 'قطعة غيار',
+        partNumber: item.part_number ?? '—',
+        available: Number(item.quantity_available ?? 0),
+        minimum: Number(item.minimum_stock ?? 0),
+      }));
+
+    const repeatedFaultItems = Array.from(
+      repeatedFaultCountByEquipment.entries()
+    )
+      .filter(([, count]) => count >= 2)
+      .map(([equipmentId, count]) => {
+        const equipmentItem: any = (equipment ?? []).find(
+          (item: any) => item.id === equipmentId
+        );
+
+        const building = equipmentItem?.building_id
+          ? buildingById.get(equipmentItem.building_id)
+          : null;
+
+        return {
+          id: equipmentId,
+          name: equipmentItem?.name ?? 'معدة غير مسماة',
+          assetId: equipmentItem?.asset_id ?? '—',
+          buildingLabel: building
+            ? building.buildingNumber
+              ? `مبنى ${building.buildingNumber}`
+              : building.name ?? '—'
+            : '—',
+          count,
+        };
+      })
+      .sort((a, b) => b.count - a.count);
+
     return {
       ...department,
       totalAssets,
@@ -368,6 +455,10 @@ export default async function ManagementPage() {
       correctiveCompletion,
       mttrHours,
       repeatedFaultAssets,
+      openFaultItems,
+      overdueMaintenanceItems,
+      lowStockItems,
+      repeatedFaultItems,
       pmDueCount: pmRecords.length,
       pmCompleted,
       correctiveDueCount: correctiveRecords.length,
@@ -1118,17 +1209,41 @@ export default async function ManagementPage() {
                   </p>
                 </div>
 
-                <Link
-                  href={`/faults?department=${department.id}`}
-                  className="rounded-xl bg-gray-50 p-4 transition hover:-translate-y-0.5 hover:bg-red-50 hover:shadow-sm"
-                >
-                  <p className="text-xs text-gray-500">
-                    الأعطال المفتوحة
-                  </p>
-                  <p className="mt-1 text-xl font-bold text-gray-900">
-                    {department.openFaults}
-                  </p>
-                </Link>
+                <details className="group rounded-xl bg-gray-50 transition open:col-span-2 open:bg-red-50/60 md:open:col-span-4">
+                  <summary className="cursor-pointer list-none p-4">
+                    <p className="text-xs text-gray-500">
+                      الأعطال المفتوحة
+                    </p>
+                    <p className="mt-1 text-xl font-bold text-gray-900">
+                      {department.openFaults}
+                    </p>
+                  </summary>
+                  <div className="border-t border-red-100 px-4 pb-4 pt-3">
+                    {department.openFaultItems.length === 0 ? (
+                      <p className="text-sm text-gray-500">
+                        لا توجد أعطال مفتوحة.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {department.openFaultItems.map((fault: any) => (
+                          <div key={fault.id} className="rounded-lg bg-white p-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="font-medium text-gray-900" dir="ltr">
+                                {fault.number}
+                              </span>
+                              <span className="text-xs text-gray-500">
+                                {fault.buildingLabel} · {fault.equipmentName}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-sm text-gray-600">
+                              {fault.description}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </details>
 
                 <div className="rounded-xl bg-gray-50 p-4">
                   <p className="text-xs text-gray-500">
@@ -1161,41 +1276,124 @@ export default async function ManagementPage() {
                   </p>
                 </div>
 
-                <Link
-                  href={`/faults?department=${department.id}`}
-                  className="rounded-xl bg-gray-50 p-4 transition hover:-translate-y-0.5 hover:bg-amber-50 hover:shadow-sm"
-                >
-                  <p className="text-xs text-gray-500">
-                    أعطال متكررة
-                  </p>
-                  <p className="mt-1 text-xl font-bold text-gray-900">
-                    {department.repeatedFaultAssets}
-                  </p>
-                </Link>
+                <details className="group rounded-xl bg-gray-50 transition open:col-span-2 open:bg-amber-50/60 md:open:col-span-4">
+                  <summary className="cursor-pointer list-none p-4">
+                    <p className="text-xs text-gray-500">
+                      أعطال متكررة
+                    </p>
+                    <p className="mt-1 text-xl font-bold text-gray-900">
+                      {department.repeatedFaultAssets}
+                    </p>
+                  </summary>
+                  <div className="border-t border-amber-100 px-4 pb-4 pt-3">
+                    {department.repeatedFaultItems.length === 0 ? (
+                      <p className="text-sm text-gray-500">
+                        لا توجد معدات بأعطال متكررة خلال آخر 90 يوم.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {department.repeatedFaultItems.map((item: any) => (
+                          <div
+                            key={item.id}
+                            className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-white p-3"
+                          >
+                            <div>
+                              <p className="font-medium text-gray-900">
+                                {item.name}
+                              </p>
+                              <p className="mt-0.5 text-xs text-gray-500">
+                                {item.buildingLabel} · {item.assetId}
+                              </p>
+                            </div>
+                            <span className="text-lg font-bold text-amber-700">
+                              {item.count} أعطال
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </details>
 
-                <Link
-                  href={`/maintenance?department=${department.id}`}
-                  className="rounded-xl bg-gray-50 p-4 transition hover:-translate-y-0.5 hover:bg-amber-50 hover:shadow-sm"
-                >
-                  <p className="text-xs text-gray-500">
-                    صيانة متأخرة
-                  </p>
-                  <p className="mt-1 text-xl font-bold text-gray-900">
-                    {department.overdueMaintenance}
-                  </p>
-                </Link>
+                <details className="group rounded-xl bg-gray-50 transition open:col-span-2 open:bg-amber-50/60 md:open:col-span-4">
+                  <summary className="cursor-pointer list-none p-4">
+                    <p className="text-xs text-gray-500">
+                      صيانة متأخرة
+                    </p>
+                    <p className="mt-1 text-xl font-bold text-gray-900">
+                      {department.overdueMaintenance}
+                    </p>
+                  </summary>
+                  <div className="border-t border-amber-100 px-4 pb-4 pt-3">
+                    {department.overdueMaintenanceItems.length === 0 ? (
+                      <p className="text-sm text-gray-500">
+                        لا توجد صيانة متأخرة.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {department.overdueMaintenanceItems.map((item: any) => (
+                          <div key={item.id} className="rounded-lg bg-white p-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="font-medium text-gray-900">
+                                {item.title}
+                              </span>
+                              <span className="text-xs font-medium text-red-600">
+                                {item.dueDate ?? '—'}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-xs text-gray-500">
+                              {item.buildingLabel} · {item.equipmentName}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </details>
 
-                <Link
-                  href={`/spare-parts?department=${department.id}`}
-                  className="rounded-xl bg-gray-50 p-4 transition hover:-translate-y-0.5 hover:bg-amber-50 hover:shadow-sm"
-                >
-                  <p className="text-xs text-gray-500">
-                    نقص قطع الغيار
-                  </p>
-                  <p className="mt-1 text-xl font-bold text-gray-900">
-                    {department.lowStockParts}
-                  </p>
-                </Link>
+                <details className="group rounded-xl bg-gray-50 transition open:col-span-2 open:bg-amber-50/60 md:open:col-span-4">
+                  <summary className="cursor-pointer list-none p-4">
+                    <p className="text-xs text-gray-500">
+                      نقص قطع الغيار
+                    </p>
+                    <p className="mt-1 text-xl font-bold text-gray-900">
+                      {department.lowStockParts}
+                    </p>
+                  </summary>
+                  <div className="border-t border-amber-100 px-4 pb-4 pt-3">
+                    {department.lowStockItems.length === 0 ? (
+                      <p className="text-sm text-gray-500">
+                        لا توجد قطع غيار منخفضة المخزون.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {department.lowStockItems.map((item: any) => (
+                          <div
+                            key={item.id}
+                            className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-white p-3"
+                          >
+                            <div>
+                              <p className="font-medium text-gray-900">
+                                {item.name}
+                              </p>
+                              <p className="mt-0.5 text-xs text-gray-500" dir="ltr">
+                                {item.partNumber}
+                              </p>
+                            </div>
+                            <div className="text-left text-sm">
+                              <p className="font-bold text-red-600">
+                                المتوفر: {item.available}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                الحد الأدنى: {item.minimum}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </details>
               </div>
             </div>
           ))}
