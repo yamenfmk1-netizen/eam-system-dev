@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+
 import {
   LayoutDashboard,
   Building2,
@@ -21,6 +22,7 @@ import {
 } from 'lucide-react';
 
 import type { UserRole } from '@/types/database.types';
+
 import {
   DEPARTMENT_CODE,
   IS_MANAGEMENT_SITE,
@@ -120,6 +122,42 @@ const managementNavItems = [
     icon: LayoutDashboard,
     roles: ['admin', 'engineer', 'technician', 'viewer'],
   },
+  {
+    href: '/buildings',
+    label: 'المباني',
+    icon: Building2,
+    roles: ['admin', 'engineer', 'technician', 'viewer'],
+  },
+  {
+    href: '/equipment',
+    label: 'المعدات',
+    icon: Cpu,
+    roles: ['admin', 'engineer', 'technician', 'viewer'],
+  },
+  {
+    href: '/tests',
+    label: 'الاختبارات',
+    icon: ClipboardCheck,
+    roles: ['admin', 'engineer', 'technician', 'viewer'],
+  },
+  {
+    href: '/maintenance',
+    label: 'الصيانة',
+    icon: Wrench,
+    roles: ['admin', 'engineer', 'technician', 'viewer'],
+  },
+  {
+    href: '/faults',
+    label: 'الأعطال',
+    icon: AlertTriangle,
+    roles: ['admin', 'engineer', 'technician', 'viewer'],
+  },
+  {
+    href: '/spare-parts',
+    label: 'قطع الغيار',
+    icon: Package,
+    roles: ['admin', 'engineer', 'technician', 'viewer'],
+  },
 ];
 
 const SIDEBAR_TITLES = {
@@ -129,23 +167,36 @@ const SIDEBAR_TITLES = {
   civil: 'إدارة الأصول المدنية',
 } as const;
 
-export default function Sidebar({ role }: { role: UserRole }) {
+export default function Sidebar({
+  role,
+}: {
+  role: UserRole;
+}) {
   const pathname = usePathname();
 
-  const currentNavItems = IS_MANAGEMENT_SITE
-    ? managementNavItems
-    : navItems;
+  const currentNavItems =
+    IS_MANAGEMENT_SITE
+      ? managementNavItems
+      : navItems;
 
-  const sidebarTitle = IS_MANAGEMENT_SITE
-    ? 'نظام متابعة الإدارات'
-    : SIDEBAR_TITLES[DEPARTMENT_CODE];
+  const sidebarTitle =
+    IS_MANAGEMENT_SITE
+      ? 'نظام متابعة الإدارات'
+      : SIDEBAR_TITLES[
+          DEPARTMENT_CODE
+        ];
 
-  const sidebarSubtitle = IS_MANAGEMENT_SITE
-    ? 'لوحة الإدارة والمتابعة'
-    : 'نظام الصيانة والتشغيل';
+  const sidebarSubtitle =
+    IS_MANAGEMENT_SITE
+      ? 'لوحة الإدارة والمتابعة'
+      : 'نظام الصيانة والتشغيل';
 
   return (
     <aside className="hidden w-64 shrink-0 flex-col border-l border-gray-200 bg-white lg:flex">
+      {/* =========================================
+          Header
+          ========================================= */}
+
       <div className="flex items-center gap-2 border-b border-gray-100 px-5 py-5">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-600 text-white">
           <Zap className="h-5 w-5" />
@@ -162,23 +213,35 @@ export default function Sidebar({ role }: { role: UserRole }) {
         </div>
       </div>
 
+      {/* =========================================
+          Navigation
+          ========================================= */}
+
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
         {currentNavItems
           .filter(
             (item) =>
-              item.roles.includes(role) &&
+              item.roles.includes(
+                role
+              ) &&
               (
                 IS_MANAGEMENT_SITE ||
-                item.href !== '/mv-network' ||
-                DEPARTMENT_CODE === 'electrical'
+                item.href !==
+                  '/mv-network' ||
+                DEPARTMENT_CODE ===
+                  'electrical'
               )
           )
           .map((item) => {
             const active =
-              pathname === item.href ||
-              pathname.startsWith(item.href + '/');
+              pathname ===
+                item.href ||
+              pathname.startsWith(
+                item.href + '/'
+              );
 
-            const Icon = item.icon;
+            const Icon =
+              item.icon;
 
             return (
               <Link
@@ -191,6 +254,7 @@ export default function Sidebar({ role }: { role: UserRole }) {
                 }`}
               >
                 <Icon className="h-4.5 w-4.5" />
+
                 {item.label}
               </Link>
             );
