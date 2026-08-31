@@ -25,23 +25,11 @@ import type {
   BuildingCriticality,
 } from '@/types/database.types';
 
-type DepartmentOption = {
-  id: string;
-  name: string;
-  code: string;
-};
-
 export default function BuildingsPage() {
   const supabase = createClient();
 
   const [buildings, setBuildings] =
     useState<Building[]>([]);
-
-  const [departments, setDepartments] =
-    useState<DepartmentOption[]>([]);
-
-  const [departmentFilter, setDepartmentFilter] =
-    useState('all');
 
   const [loading, setLoading] =
     useState(true);
@@ -77,6 +65,9 @@ export default function BuildingsPage() {
 
       // =====================================================
       // موقع الإدارة
+      //
+      // نأخذ جميع الإدارات المسموح للمستخدم بها.
+      // لا يوجد فلتر إدارة في صفحة المباني.
       // =====================================================
 
       if (IS_MANAGEMENT_SITE) {
@@ -86,11 +77,9 @@ export default function BuildingsPage() {
 
         if (!user) {
           setBuildings([]);
-          setDepartments([]);
           return;
         }
 
-        // الإدارات المسموح للمستخدم بها
         const {
           data: userDepartments,
           error: userDepartmentsError,
@@ -106,89 +95,22 @@ export default function BuildingsPage() {
           );
 
           setBuildings([]);
-          setDepartments([]);
           return;
         }
 
-        const allowedDepartmentIds = Array.from(
+        targetDepartmentIds = Array.from(
           new Set(
             (userDepartments ?? [])
-              .map((item) => item.department_id)
+              .map(
+                (item) =>
+                  item.department_id
+              )
               .filter(
                 (id): id is string =>
                   Boolean(id)
               )
           )
         );
-
-        if (
-          allowedDepartmentIds.length === 0
-        ) {
-          setBuildings([]);
-          setDepartments([]);
-          return;
-        }
-
-        // بيانات الإدارات المسموح بها
-        const {
-          data: allowedDepartments,
-          error: departmentsError,
-        } = await supabase
-          .from('departments')
-          .select('id,name,code')
-          .in(
-            'id',
-            allowedDepartmentIds
-          )
-          .order('name');
-
-        if (departmentsError) {
-          console.error(
-            'Error loading departments:',
-            departmentsError
-          );
-
-          setBuildings([]);
-          setDepartments([]);
-          return;
-        }
-
-        const departmentList =
-          (allowedDepartments ??
-            []) as DepartmentOption[];
-
-        setDepartments(
-          departmentList
-        );
-
-        // إذا جميع الإدارات
-        if (
-          departmentFilter === 'all'
-        ) {
-          targetDepartmentIds =
-            departmentList.map(
-              (department) =>
-                department.id
-            );
-        } else {
-          // حماية:
-          // لا نستخدم إدارة غير مصرح بها
-          const selectedDepartment =
-            departmentList.find(
-              (department) =>
-                department.id ===
-                departmentFilter
-            );
-
-          if (!selectedDepartment) {
-            setBuildings([]);
-            return;
-          }
-
-          targetDepartmentIds = [
-            selectedDepartment.id,
-          ];
-        }
       }
 
       // =====================================================
@@ -229,7 +151,7 @@ export default function BuildingsPage() {
       }
 
       // =====================================================
-      // إذا ما عندنا أي إدارة نستهدفها
+      // لا توجد إدارات مسموحة
       // =====================================================
 
       if (
@@ -240,7 +162,13 @@ export default function BuildingsPage() {
       }
 
       // =====================================================
-      // جلب أصول الإدارات المطلوبة
+      // جلب جميع الأصول للإدارات المستهدفة
+      //
+      // في موقع الإدارة:
+      // Electrical + HVAC + أي إدارة أخرى مسموحة
+      //
+      // في موقع القسم:
+      // أصول القسم الحالي فقط
       // =====================================================
 
       const {
@@ -273,12 +201,16 @@ export default function BuildingsPage() {
       }
 
       // =====================================================
-      // حساب عدد الأصول داخل كل مبنى
+      // حساب عدد المعدات داخل كل مبنى
       //
       // في موقع الإدارة:
-      // - All = مجموع أصول الإدارات المسموحة
-      // - HVAC = أصول HVAC فقط
-      // - Electrical = أصول Electrical فقط
+      // العدد = مجموع المعدات من جميع الإدارات المسموحة
+      //
+      // مثال:
+      // مبنى 5
+      // Electrical = 2
+      // HVAC = 3
+      // equipment_count = 5
       // =====================================================
 
       const equipmentCountByBuilding =
@@ -302,7 +234,7 @@ export default function BuildingsPage() {
       });
 
       // =====================================================
-      // المباني التي تحتوي أصول للإدارة المختارة
+      // استخراج المباني التي تحتوي على أصول
       // =====================================================
 
       const buildingIds = Array.from(
@@ -317,7 +249,7 @@ export default function BuildingsPage() {
       }
 
       // =====================================================
-      // جلب المباني فقط
+      // جلب بيانات المباني
       // =====================================================
 
       const {
@@ -341,7 +273,7 @@ export default function BuildingsPage() {
       }
 
       // =====================================================
-      // إضافة عدد الأصول حسب الإدارة المختارة
+      // إضافة عدد المعدات لكل مبنى
       // =====================================================
 
       const mapped = (
@@ -369,21 +301,24 @@ export default function BuildingsPage() {
   }
 
   // =========================================================
-  // إعادة التحميل عند تغيير الإدارة
+  // تحميل مرة واحدة
   // =========================================================
 
   useEffect(() => {
     loadBuildings();
-  }, [departmentFilter]);
+  }, []);
 
   // =========================================================
-  // المحطات / المواقع الموجودة ضمن النتائج الحالية
+  // المحطات / المواقع الموجودة ضمن المباني الحالية
   // =========================================================
 
   const stations = Array.from(
     new Set(
       buildings
-        .map((b) => b.station)
+        .map(
+          (building) =>
+            building.station
+        )
         .filter(
           (station): station is string =>
             Boolean(station)
@@ -398,34 +333,39 @@ export default function BuildingsPage() {
   // =========================================================
 
   const filtered =
-    buildings.filter((b) => {
+    buildings.filter((building) => {
       const q =
-        search.toLowerCase();
+        search
+          .trim()
+          .toLowerCase();
 
       const matchesSearch =
-        b.name
+        building.name
           .toLowerCase()
           .includes(q) ||
-        b.building_number
+        building.building_number
           .toLowerCase()
           .includes(q) ||
-        (b.station ?? '')
+        (
+          building.station ?? ''
+        )
           .toLowerCase()
           .includes(q);
 
       const matchesStatus =
         statusFilter === 'all' ||
-        b.status === statusFilter;
+        building.status ===
+          statusFilter;
 
       const matchesStation =
         stationFilter === 'all' ||
-        b.station ===
+        building.station ===
           stationFilter;
 
       const matchesCriticality =
         criticalityFilter ===
           'all' ||
-        b.criticality ===
+        building.criticality ===
           criticalityFilter;
 
       return (
@@ -524,49 +464,6 @@ export default function BuildingsPage() {
             className="input-field pe-9"
           />
         </div>
-
-        {/* ===================================================
-            Department Filter
-            يظهر فقط في موقع الإدارة
-            =================================================== */}
-
-        {IS_MANAGEMENT_SITE && (
-          <select
-            value={
-              departmentFilter
-            }
-            onChange={(e) => {
-              setDepartmentFilter(
-                e.target.value
-              );
-
-              // إعادة فلتر الموقع عند تغيير الإدارة
-              setStationFilter(
-                'all'
-              );
-            }}
-            className="input-field sm:w-48"
-          >
-            <option value="all">
-              جميع الإدارات
-            </option>
-
-            {departments.map(
-              (department) => (
-                <option
-                  key={
-                    department.id
-                  }
-                  value={
-                    department.id
-                  }
-                >
-                  {department.name}
-                </option>
-              )
-            )}
-          </select>
-        )}
 
         {/* Station */}
 
@@ -682,10 +579,14 @@ export default function BuildingsPage() {
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {sortedFiltered.map(
-            (b) => (
+            (building) => (
               <BuildingCard
-                key={b.id}
-                building={b}
+                key={
+                  building.id
+                }
+                building={
+                  building
+                }
               />
             )
           )}
