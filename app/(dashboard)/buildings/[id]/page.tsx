@@ -3,7 +3,10 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { DEPARTMENT_CODE } from '@/lib/site-config';
+import {
+  DEPARTMENT_CODE,
+  IS_MANAGEMENT_SITE,
+} from '@/lib/site-config';
 
 import StatusBadge from '@/components/ui/StatusBadge';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
@@ -43,6 +46,12 @@ import {
 
 import toast from 'react-hot-toast';
 import Link from 'next/link';
+
+type DepartmentOption = {
+  id: string;
+  name: string;
+  code: string;
+};
 
 const COMMON_TABS = [
   { key: 'tests', label: 'الاختبارات' },
@@ -141,6 +150,12 @@ export default function BuildingDetailsPage() {
   const [departmentName, setDepartmentName] =
     useState('');
 
+  const [departments, setDepartments] =
+    useState<DepartmentOption[]>([]);
+
+  const [departmentFilter, setDepartmentFilter] =
+    useState('all');
+
   const [loading, setLoading] =
     useState(true);
 
@@ -160,36 +175,223 @@ export default function BuildingDetailsPage() {
     setLoading(true);
 
     try {
+      let targetDepartmentIds: string[] = [];
+
       // =========================
-      // معرفة القسم الحالي للموقع
+      // تحديد الإدارات المسموح بها
       // =========================
 
-      const {
-        data: department,
-        error: departmentError,
-      } = await supabase
-        .from('departments')
-        .select('id,name,code')
-        .eq('code', DEPARTMENT_CODE)
-        .single();
+      if (IS_MANAGEMENT_SITE) {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
 
-      if (departmentError || !department) {
-        toast.error(
-          `تعذر تحديد القسم: ${DEPARTMENT_CODE}`
+        if (!user) {
+          setBuilding(null);
+          setEquipment([]);
+          setTests([]);
+          setMaintenance([]);
+          setFaults([]);
+          setAttachments([]);
+          setDepartments([]);
+          setDepartmentName('');
+          return;
+        }
+
+        const {
+          data: userDepartments,
+          error: userDepartmentsError,
+        } = await supabase
+          .from('user_departments')
+          .select('department_id')
+          .eq('user_id', user.id);
+
+        if (userDepartmentsError) {
+          console.error(
+            'Error loading user departments:',
+            userDepartmentsError
+          );
+
+          toast.error(
+            'تعذر تحميل الإدارات المسموح بها'
+          );
+
+          return;
+        }
+
+        const allowedDepartmentIds = Array.from(
+          new Set(
+            (userDepartments ?? [])
+              .map(
+                (item) => item.department_id
+              )
+              .filter(
+                (departmentId): departmentId is string =>
+                  Boolean(departmentId)
+              )
+          )
         );
 
-        setLoading(false);
-        return;
+        if (
+          allowedDepartmentIds.length === 0
+        ) {
+          setDepartments([]);
+          setDepartmentName('');
+          setEquipment([]);
+          setTests([]);
+          setMaintenance([]);
+          setFaults([]);
+          setAttachments([]);
+
+          const { data: b } = await supabase
+            .from('buildings')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+          setBuilding(b);
+
+          return;
+        }
+
+        const {
+          data: allowedDepartments,
+          error: departmentsError,
+        } = await supabase
+          .from('departments')
+          .select('id,name,code')
+          .in(
+            'id',
+            allowedDepartmentIds
+          )
+          .order('name');
+
+        if (departmentsError) {
+          console.error(
+            'Error loading departments:',
+            departmentsError
+          );
+
+          toast.error(
+            'تعذر تحميل بيانات الإدارات'
+          );
+
+          return;
+        }
+
+        const departmentList =
+          (allowedDepartments ??
+            []) as DepartmentOption[];
+
+        setDepartments(departmentList);
+
+        if (
+          departmentFilter === 'all'
+        ) {
+          targetDepartmentIds =
+            departmentList.map(
+              (department) =>
+                department.id
+            );
+
+          setDepartmentName(
+            'جميع الإدارات'
+          );
+        } else {
+          const selectedDepartment =
+            departmentList.find(
+              (department) =>
+                department.id ===
+                departmentFilter
+            );
+
+          if (!selectedDepartment) {
+            setDepartmentFilter('all');
+
+            targetDepartmentIds =
+              departmentList.map(
+                (department) =>
+                  department.id
+              );
+
+            setDepartmentName(
+              'جميع الإدارات'
+            );
+          } else {
+            targetDepartmentIds = [
+              selectedDepartment.id,
+            ];
+
+            setDepartmentName(
+              selectedDepartment.name
+            );
+          }
+        }
+      } else {
+        // =========================
+        // مواقع الأقسام العادية
+        // Electrical / HVAC / Mechanical / Civil
+        // =========================
+
+        const {
+          data: department,
+          error: departmentError,
+        } = await supabase
+          .from('departments')
+          .select('id,name,code')
+          .eq(
+            'code',
+            DEPARTMENT_CODE
+          )
+          .single();
+
+        if (
+          departmentError ||
+          !department
+        ) {
+          toast.error(
+            `تعذر تحديد القسم: ${DEPARTMENT_CODE}`
+          );
+
+          return;
+        }
+
+        targetDepartmentIds = [
+          department.id,
+        ];
+
+        setDepartmentName(
+          department.name
+        );
       }
-
-      const departmentId = department.id;
-
-      setDepartmentName(department.name);
 
       // =========================
       // تحميل بيانات المبنى
-      // كل البيانات التشغيلية مفلترة بالقسم
+      // والبيانات التشغيلية حسب الفلتر
       // =========================
+
+      const buildingQuery = supabase
+        .from('buildings')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (
+        targetDepartmentIds.length === 0
+      ) {
+        const { data: b } =
+          await buildingQuery;
+
+        setBuilding(b);
+        setEquipment([]);
+        setTests([]);
+        setMaintenance([]);
+        setFaults([]);
+        setAttachments([]);
+        setActiveTab('overview');
+
+        return;
+      }
 
       const [
         { data: b },
@@ -199,80 +401,70 @@ export default function BuildingDetailsPage() {
         { data: f },
         { data: att },
       ] = await Promise.all([
-        // المبنى مشترك بين الأقسام
-        supabase
-          .from('buildings')
-          .select('*')
-          .eq('id', id)
-          .single(),
+        buildingQuery,
 
-        // معدات هذا القسم فقط
         supabase
           .from('equipment')
           .select('*')
           .eq('building_id', id)
-          .eq(
+          .in(
             'department_id',
-            departmentId
+            targetDepartmentIds
           )
           .is('deleted_at', null)
           .order('created_at'),
 
-        // اختبارات هذا القسم فقط
         supabase
           .from('tests')
           .select(
             '*, equipment(name, asset_id)'
           )
           .eq('building_id', id)
-          .eq(
+          .in(
             'department_id',
-            departmentId
+            targetDepartmentIds
           )
           .order('test_date', {
             ascending: false,
           }),
 
-        // صيانة هذا القسم فقط
         supabase
           .from('maintenance_records')
           .select(
             '*, equipment(name, asset_id)'
           )
           .eq('building_id', id)
-          .eq(
+          .in(
             'department_id',
-            departmentId
+            targetDepartmentIds
           )
           .order('maintenance_date', {
             ascending: false,
           }),
 
-        // أعطال هذا القسم فقط
         supabase
           .from('faults')
           .select(
             '*, equipment(name, asset_id)'
           )
           .eq('building_id', id)
-          .eq(
+          .in(
             'department_id',
-            departmentId
+            targetDepartmentIds
           )
           .order('reported_at', {
             ascending: false,
           }),
 
-        // ملفات هذا القسم فقط
         supabase
           .from('attachments')
           .select(
             '*, equipment(name, asset_id)'
           )
           .eq('building_id', id)
-          .eq(
+          .in(
             'department_id',
-            departmentId
+            targetDepartmentIds
           )
           .order('created_at', {
             ascending: false,
@@ -280,7 +472,9 @@ export default function BuildingDetailsPage() {
       ]);
 
       setBuilding(b);
-      setEquipment((eq ?? []) as Equipment[]);
+      setEquipment(
+        (eq ?? []) as Equipment[]
+      );
       setTests(t ?? []);
       setMaintenance(m ?? []);
       setFaults(f ?? []);
@@ -303,7 +497,7 @@ export default function BuildingDetailsPage() {
     if (id) {
       load();
     }
-  }, [id]);
+  }, [id, departmentFilter]);
 
   async function handleDelete() {
     setDeleting(true);
@@ -537,6 +731,50 @@ export default function BuildingDetailsPage() {
           </button>
         </div>
       </div>
+
+      {/* =========================
+          Department Filter
+          يظهر فقط في موقع الإدارة
+          ========================= */}
+
+      {IS_MANAGEMENT_SITE && (
+        <div className="card flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-gray-800">
+              عرض بيانات المبنى حسب الإدارة
+            </p>
+
+            <p className="text-xs text-gray-500">
+              اختر إدارة محددة أو اعرض جميع الإدارات المسموح لك بها
+            </p>
+          </div>
+
+          <select
+            value={departmentFilter}
+            onChange={(e) =>
+              setDepartmentFilter(
+                e.target.value
+              )
+            }
+            className="input-field sm:w-56"
+          >
+            <option value="all">
+              جميع الإدارات
+            </option>
+
+            {departments.map(
+              (department) => (
+                <option
+                  key={department.id}
+                  value={department.id}
+                >
+                  {department.name}
+                </option>
+              )
+            )}
+          </select>
+        </div>
+      )}
 
       {/* =========================
           Tabs
