@@ -671,44 +671,114 @@ export default async function ManagementPage() {
     correctiveCompletion: department.correctiveCompletion,
   }));
 
-  const managementAlerts = sortedDepartments.flatMap((department) => {
-    const alerts: string[] = [];
+  type ManagementAlert = {
+    departmentId: string;
+    departmentName: string;
+    title: string;
+    detail: string;
+    severity: 'critical' | 'high' | 'medium';
+    score: number;
+  };
 
-    if (department.criticalFaults > 0) {
-      alerts.push(
-        `${department.name}: ${department.criticalFaults} أعطال حرجة مفتوحة`
-      );
-    }
+  const managementAlerts: ManagementAlert[] = sortedDepartments
+    .flatMap((department) => {
+      const alerts: ManagementAlert[] = [];
 
-    if (department.overdueMaintenance > 0) {
-      alerts.push(
-        `${department.name}: ${department.overdueMaintenance} أعمال صيانة متأخرة`
-      );
-    }
+      if (department.criticalFaults > 0) {
+        alerts.push({
+          departmentId: department.id,
+          departmentName: department.name,
+          title: 'أعطال حرجة مفتوحة',
+          detail: `${department.criticalFaults} أعطال حرجة تحتاج متابعة فورية`,
+          severity: 'critical',
+          score: 500 + department.criticalFaults * 50,
+        });
+      }
 
-    if (department.repeatedFaultAssets > 0) {
-      alerts.push(
-        `${department.name}: ${department.repeatedFaultAssets} معدات بأعطال متكررة خلال 90 يوم`
-      );
-    }
+      if (department.overdueMaintenance > 0) {
+        alerts.push({
+          departmentId: department.id,
+          departmentName: department.name,
+          title: 'صيانة متأخرة',
+          detail: `${department.overdueMaintenance} أعمال صيانة تجاوزت موعدها`,
+          severity: department.overdueMaintenance >= 3 ? 'high' : 'medium',
+          score: 300 + department.overdueMaintenance * 20,
+        });
+      }
 
-    if (
-      department.pmCompletion !== null &&
-      department.pmCompletion < 75
-    ) {
-      alerts.push(
-        `${department.name}: إنجاز الصيانة الوقائية ${department.pmCompletion}%`
-      );
-    }
+      if (department.repeatedFaultAssets > 0) {
+        alerts.push({
+          departmentId: department.id,
+          departmentName: department.name,
+          title: 'أعطال متكررة',
+          detail: `${department.repeatedFaultAssets} معدات تكرر عليها العطل خلال 90 يوم`,
+          severity: department.repeatedFaultAssets >= 3 ? 'high' : 'medium',
+          score: 250 + department.repeatedFaultAssets * 15,
+        });
+      }
 
-    if (department.lowStockParts > 0) {
-      alerts.push(
-        `${department.name}: ${department.lowStockParts} قطع غيار منخفضة المخزون`
-      );
-    }
+      if (
+        department.pmCompletion !== null &&
+        department.pmCompletion < 75
+      ) {
+        alerts.push({
+          departmentId: department.id,
+          departmentName: department.name,
+          title: 'انخفاض إنجاز الصيانة الوقائية',
+          detail: `نسبة الإنجاز الحالية ${department.pmCompletion}%`,
+          severity: department.pmCompletion < 50 ? 'high' : 'medium',
+          score: 220 + (75 - department.pmCompletion),
+        });
+      }
 
-    return alerts;
-  });
+      if (
+        department.correctiveCompletion !== null &&
+        department.correctiveCompletion < 75
+      ) {
+        alerts.push({
+          departmentId: department.id,
+          departmentName: department.name,
+          title: 'انخفاض إنجاز الصيانة العلاجية',
+          detail: `نسبة الإنجاز الحالية ${department.correctiveCompletion}%`,
+          severity:
+            department.correctiveCompletion < 50 ? 'high' : 'medium',
+          score: 210 + (75 - department.correctiveCompletion),
+        });
+      }
+
+      if (department.lowStockParts > 0) {
+        alerts.push({
+          departmentId: department.id,
+          departmentName: department.name,
+          title: 'نقص قطع الغيار',
+          detail: `${department.lowStockParts} أصناف عند أو تحت الحد الأدنى للمخزون`,
+          severity: department.lowStockParts >= 5 ? 'high' : 'medium',
+          score: 180 + department.lowStockParts * 10,
+        });
+      }
+
+      if (department.expiredWarranties > 0) {
+        alerts.push({
+          departmentId: department.id,
+          departmentName: department.name,
+          title: 'ضمانات منتهية',
+          detail: `${department.expiredWarranties} عناصر انتهت ضماناتها`,
+          severity: 'medium',
+          score: 120 + department.expiredWarranties * 5,
+        });
+      }
+
+      return alerts;
+    })
+    .sort((a, b) => b.score - a.score);
+
+  const criticalManagementAlerts = managementAlerts.filter(
+    (alert) => alert.severity === 'critical'
+  ).length;
+
+  const highManagementAlerts = managementAlerts.filter(
+    (alert) => alert.severity === 'high'
+  ).length;
 
   return (
     <div className="space-y-8" dir="rtl">
@@ -1126,13 +1196,40 @@ export default async function ManagementPage() {
         </div>
       </div>
 
-      {/* تنبيهات الإدارة */}
+      {/* ملخص تنبيهات الإدارة */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatCard
+          label="إجمالي التنبيهات الإدارية"
+          value={managementAlerts.length}
+          icon={AlertTriangle}
+          tone={managementAlerts.length > 0 ? 'warning' : 'success'}
+        />
+        <StatCard
+          label="تنبيهات حرجة"
+          value={criticalManagementAlerts}
+          icon={ShieldAlert}
+          tone={criticalManagementAlerts > 0 ? 'danger' : 'success'}
+        />
+        <StatCard
+          label="تنبيهات عالية"
+          value={highManagementAlerts}
+          icon={AlertTriangle}
+          tone={highManagementAlerts > 0 ? 'warning' : 'success'}
+        />
+      </div>
+
+      {/* تنبيهات الإدارة مرتبة حسب الأولوية */}
       <div className="rounded-2xl border bg-white p-6 shadow-sm">
         <div className="mb-5 flex items-center gap-3">
           <ShieldCheck className="h-6 w-6" />
-          <h2 className="text-xl font-bold text-gray-900">
-            تنبيهات تحتاج اهتمام الإدارة
-          </h2>
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">
+              تنبيهات تحتاج اهتمام الإدارة
+            </h2>
+            <p className="mt-1 text-sm text-gray-500">
+              مرتبة تلقائيًا من الأعلى خطورة إلى الأقل
+            </p>
+          </div>
         </div>
 
         {managementAlerts.length === 0 ? (
@@ -1143,11 +1240,57 @@ export default async function ManagementPage() {
           <div className="space-y-3">
             {managementAlerts.map((alert, index) => (
               <div
-                key={`${alert}-${index}`}
-                className="flex items-center gap-3 rounded-xl bg-gray-50 p-4"
+                key={`${alert.departmentId}-${alert.title}-${index}`}
+                className={`flex items-start justify-between gap-4 rounded-xl border p-4 ${
+                  alert.severity === 'critical'
+                    ? 'border-red-200 bg-red-50/60'
+                    : alert.severity === 'high'
+                      ? 'border-amber-200 bg-amber-50/60'
+                      : 'border-gray-100 bg-gray-50'
+                }`}
               >
-                <AlertTriangle className="h-5 w-5 shrink-0 text-orange-500" />
-                <span>{alert}</span>
+                <div className="flex min-w-0 items-start gap-3">
+                  <AlertTriangle
+                    className={`mt-0.5 h-5 w-5 shrink-0 ${
+                      alert.severity === 'critical'
+                        ? 'text-red-600'
+                        : alert.severity === 'high'
+                          ? 'text-amber-600'
+                          : 'text-gray-500'
+                    }`}
+                  />
+
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-bold text-gray-900">
+                        {alert.departmentName}
+                      </span>
+                      <span className="text-gray-300">•</span>
+                      <span className="font-medium text-gray-800">
+                        {alert.title}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-sm text-gray-600">
+                      {alert.detail}
+                    </p>
+                  </div>
+                </div>
+
+                <span
+                  className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
+                    alert.severity === 'critical'
+                      ? 'bg-red-100 text-red-700'
+                      : alert.severity === 'high'
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-gray-200 text-gray-700'
+                  }`}
+                >
+                  {alert.severity === 'critical'
+                    ? 'حرج'
+                    : alert.severity === 'high'
+                      ? 'عالي'
+                      : 'متوسط'}
+                </span>
               </div>
             ))}
           </div>
