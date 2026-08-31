@@ -136,7 +136,7 @@ export default async function ManagementPage() {
 
     supabase
       .from('equipment')
-      .select('id,department_id,status,building_id')
+      .select('id,name,asset_id,department_id,status,building_id')
       .in('department_id', departmentIds)
       .is('deleted_at', null),
 
@@ -195,6 +195,17 @@ export default async function ManagementPage() {
   const departmentNameById = new Map(
     departmentList.map((department) => [department.id, department.name])
   );
+
+  const buildingById = new Map(
+    (buildings ?? []).map((building: any) => [
+      building.id,
+      {
+        name: building.name,
+        buildingNumber: building.building_number,
+      },
+    ])
+  );
+
   const useSchedules = schedules !== null;
 
   const departmentStats = departmentList.map((department) => {
@@ -520,6 +531,57 @@ export default async function ManagementPage() {
   );
 
   // ============================================================
+  // المعدات الأكثر تكرارًا بالأعطال خلال آخر 90 يوم
+  // ============================================================
+
+  const equipmentById = new Map(
+    (equipment ?? []).map((item: any) => [item.id, item])
+  );
+
+  const repeatedEquipmentFaultCounts = new Map<string, number>();
+
+  for (const fault of sixMonthFaults ?? []) {
+    if (!fault.equipment_id || !fault.reported_at) continue;
+
+    if (fault.reported_at < `${ninetyDaysAgoStr}T00:00:00`) {
+      continue;
+    }
+
+    repeatedEquipmentFaultCounts.set(
+      fault.equipment_id,
+      (repeatedEquipmentFaultCounts.get(fault.equipment_id) ?? 0) + 1
+    );
+  }
+
+  const topRepeatedEquipment = Array.from(
+    repeatedEquipmentFaultCounts.entries()
+  )
+    .filter(([, count]) => count >= 2)
+    .map(([equipmentId, faultCount]) => {
+      const item: any = equipmentById.get(equipmentId);
+      const building = item?.building_id
+        ? buildingById.get(item.building_id)
+        : null;
+
+      return {
+        id: equipmentId,
+        name: item?.name ?? 'معدة غير مسماة',
+        assetId: item?.asset_id ?? null,
+        departmentName: item?.department_id
+          ? departmentNameById.get(item.department_id) ?? '—'
+          : '—',
+        buildingLabel: building
+          ? building.buildingNumber
+            ? `مبنى ${building.buildingNumber}`
+            : building.name ?? '—'
+          : '—',
+        faultCount,
+      };
+    })
+    .sort((a, b) => b.faultCount - a.faultCount)
+    .slice(0, 8);
+
+  // ============================================================
   // المباني الأعلى أولوية على مستوى الإدارة
   // يعتمد الترتيب على الأعطال الحرجة ثم المفتوحة ثم الصيانة المتأخرة.
   // ============================================================
@@ -789,6 +851,68 @@ export default async function ManagementPage() {
           </p>
         </div>
         <DepartmentPerformanceChart data={departmentComparisonData} />
+      </div>
+
+      {/* المعدات الأكثر تكرارًا بالأعطال */}
+      <div className="card">
+        <div className="mb-4">
+          <h2 className="font-bold text-gray-900">
+            المعدات الأكثر تكرارًا بالأعطال
+          </h2>
+          <p className="mt-0.5 text-xs text-gray-400">
+            المعدات التي سُجل عليها عطلان أو أكثر خلال آخر 90 يوم
+          </p>
+        </div>
+
+        {topRepeatedEquipment.length === 0 ? (
+          <p className="py-8 text-center text-sm text-gray-400">
+            لا توجد معدات بأعطال متكررة خلال آخر 90 يوم
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 text-xs text-gray-400">
+                  <th className="px-3 py-2 text-start font-medium">المعدة</th>
+                  <th className="px-3 py-2 text-start font-medium">رقم الأصل</th>
+                  <th className="px-3 py-2 text-start font-medium">القسم</th>
+                  <th className="px-3 py-2 text-start font-medium">المبنى</th>
+                  <th className="px-3 py-2 text-center font-medium">عدد الأعطال</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topRepeatedEquipment.map((item) => (
+                  <tr
+                    key={item.id}
+                    className="border-b border-gray-50 last:border-0 hover:bg-gray-50/70"
+                  >
+                    <td className="px-3 py-3 font-medium text-gray-900">
+                      {item.name}
+                    </td>
+                    <td className="px-3 py-3 text-gray-600" dir="ltr">
+                      {item.assetId ?? '—'}
+                    </td>
+                    <td className="px-3 py-3 text-gray-600">
+                      {item.departmentName}
+                    </td>
+                    <td className="px-3 py-3 text-gray-600">
+                      {item.buildingLabel}
+                    </td>
+                    <td
+                      className={`px-3 py-3 text-center text-lg font-bold ${
+                        item.faultCount >= 4
+                          ? 'text-red-600'
+                          : 'text-amber-600'
+                      }`}
+                    >
+                      {item.faultCount}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* المباني الأعلى أولوية */}
