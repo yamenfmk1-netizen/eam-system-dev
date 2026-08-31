@@ -139,7 +139,7 @@ export function DepartmentPerformanceChart({
       <BarChart
         data={chartData}
         layout="vertical"
-        margin={{ top: 10, right: 20, left: 20, bottom: 0 }}
+        margin={{ top: 10, right: 20, left: 80, bottom: 0 }}
       >
         <CartesianGrid strokeDasharray="3 3" horizontal={false} />
         <XAxis
@@ -152,7 +152,7 @@ export function DepartmentPerformanceChart({
         <YAxis
           type="category"
           dataKey="department"
-          width={120}
+          width={150}
           fontSize={12}
         />
         <Tooltip
