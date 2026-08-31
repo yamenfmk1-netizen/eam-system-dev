@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import StatCard from '@/components/ui/StatCard';
 import { DepartmentPerformanceChart, MonthlyFaultTrendChart } from '@/components/dashboard/DashboardCharts';
 import {
@@ -1109,7 +1110,7 @@ export default async function ManagementPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <div className="rounded-xl bg-gray-50 p-4">
                   <p className="text-xs text-gray-500">الأصول</p>
                   <p className="mt-1 text-xl font-bold">
@@ -1117,21 +1118,17 @@ export default async function ManagementPage() {
                   </p>
                 </div>
 
-                <div className="rounded-xl bg-gray-50 p-4">
-                  <p className="text-xs text-gray-500">المباني</p>
-                  <p className="mt-1 text-xl font-bold">
-                    {department.buildingsWithAssets}
-                  </p>
-                </div>
-
-                <div className="rounded-xl bg-gray-50 p-4">
+                <Link
+                  href={`/faults?department=${department.id}`}
+                  className="rounded-xl bg-gray-50 p-4 transition hover:-translate-y-0.5 hover:bg-red-50 hover:shadow-sm"
+                >
                   <p className="text-xs text-gray-500">
                     الأعطال المفتوحة
                   </p>
-                  <p className="mt-1 text-xl font-bold">
+                  <p className="mt-1 text-xl font-bold text-gray-900">
                     {department.openFaults}
                   </p>
-                </div>
+                </Link>
 
                 <div className="rounded-xl bg-gray-50 p-4">
                   <p className="text-xs text-gray-500">
@@ -1164,32 +1161,41 @@ export default async function ManagementPage() {
                   </p>
                 </div>
 
-                <div className="rounded-xl bg-gray-50 p-4">
+                <Link
+                  href={`/faults?department=${department.id}`}
+                  className="rounded-xl bg-gray-50 p-4 transition hover:-translate-y-0.5 hover:bg-amber-50 hover:shadow-sm"
+                >
                   <p className="text-xs text-gray-500">
                     أعطال متكررة
                   </p>
-                  <p className="mt-1 text-xl font-bold">
+                  <p className="mt-1 text-xl font-bold text-gray-900">
                     {department.repeatedFaultAssets}
                   </p>
-                </div>
+                </Link>
 
-                <div className="rounded-xl bg-gray-50 p-4">
+                <Link
+                  href={`/maintenance?department=${department.id}`}
+                  className="rounded-xl bg-gray-50 p-4 transition hover:-translate-y-0.5 hover:bg-amber-50 hover:shadow-sm"
+                >
                   <p className="text-xs text-gray-500">
                     صيانة متأخرة
                   </p>
-                  <p className="mt-1 text-xl font-bold">
+                  <p className="mt-1 text-xl font-bold text-gray-900">
                     {department.overdueMaintenance}
                   </p>
-                </div>
+                </Link>
 
-                <div className="rounded-xl bg-gray-50 p-4">
+                <Link
+                  href={`/spare-parts?department=${department.id}`}
+                  className="rounded-xl bg-gray-50 p-4 transition hover:-translate-y-0.5 hover:bg-amber-50 hover:shadow-sm"
+                >
                   <p className="text-xs text-gray-500">
                     نقص قطع الغيار
                   </p>
-                  <p className="mt-1 text-xl font-bold">
+                  <p className="mt-1 text-xl font-bold text-gray-900">
                     {department.lowStockParts}
                   </p>
-                </div>
+                </Link>
               </div>
             </div>
           ))}
