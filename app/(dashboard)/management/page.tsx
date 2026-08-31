@@ -114,6 +114,7 @@ export default async function ManagementPage() {
 
   const [
     { data: departments },
+    { data: buildings },
     { data: equipment },
     { data: openFaults },
     { data: schedules },
@@ -128,6 +129,10 @@ export default async function ManagementPage() {
       .select('id,name,code')
       .in('id', departmentIds)
       .order('name'),
+
+    supabase
+      .from('buildings')
+      .select('id,name,building_number'),
 
     supabase
       .from('equipment')
@@ -174,6 +179,7 @@ export default async function ManagementPage() {
       .select('id,department_id,repair_time_minutes,closed_at')
       .in('department_id', departmentIds)
       .not('closed_at', 'is', null)
+      .not('repair_time_minutes', 'is', null)
       .gte('closed_at', `${monthStart}T00:00:00+03:00`)
       .lte('closed_at', now.toISOString()),
 
@@ -186,6 +192,9 @@ export default async function ManagementPage() {
   ]);
 
   const departmentList = (departments ?? []) as Department[];
+  const departmentNameById = new Map(
+    departmentList.map((department) => [department.id, department.name])
+  );
   const useSchedules = schedules !== null;
 
   const departmentStats = departmentList.map((department) => {
@@ -510,6 +519,70 @@ export default async function ManagementPage() {
     }
   );
 
+  // ============================================================
+  // المباني الأعلى أولوية على مستوى الإدارة
+  // يعتمد الترتيب على الأعطال الحرجة ثم المفتوحة ثم الصيانة المتأخرة.
+  // ============================================================
+
+  const buildingPriorityData = (buildings ?? [])
+    .map((building: any) => {
+      const buildingFaults = (openFaults ?? []).filter(
+        (fault: any) => fault.building_id === building.id
+      );
+
+      const criticalFaults = buildingFaults.filter(
+        (fault: any) => fault.priority === 'critical'
+      ).length;
+
+      const buildingMaintenance = useSchedules
+        ? (schedules ?? []).filter(
+            (item: any) => item.building_id === building.id
+          )
+        : (maintenanceFallback ?? []).filter(
+            (item: any) => item.building_id === building.id
+          );
+
+      const departmentSet = new Set<string>();
+
+      for (const fault of buildingFaults) {
+        if (fault.department_id) {
+          departmentSet.add(fault.department_id);
+        }
+      }
+
+      for (const item of buildingMaintenance) {
+        if (item.department_id) {
+          departmentSet.add(item.department_id);
+        }
+      }
+
+      const departmentNames = Array.from(departmentSet)
+        .map((id) => departmentNameById.get(id))
+        .filter((name): name is string => Boolean(name));
+
+      const openFaultCount = buildingFaults.length;
+      const overdueMaintenanceCount = buildingMaintenance.length;
+
+      const score =
+        criticalFaults * 100 +
+        openFaultCount * 25 +
+        overdueMaintenanceCount * 15;
+
+      return {
+        id: building.id,
+        name: building.name,
+        buildingNumber: building.building_number,
+        openFaultCount,
+        criticalFaults,
+        overdueMaintenanceCount,
+        departmentNames,
+        score,
+      };
+    })
+    .filter((building) => building.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8);
+
   // ترتيب الأقسام بحيث يظهر الأكثر حاجة للاهتمام أولًا.
   const sortedDepartments = [...departmentStats].sort((a, b) => {
     const scoreA =
@@ -716,6 +789,83 @@ export default async function ManagementPage() {
           </p>
         </div>
         <DepartmentPerformanceChart data={departmentComparisonData} />
+      </div>
+
+      {/* المباني الأعلى أولوية */}
+      <div className="card">
+        <div className="mb-4">
+          <h2 className="font-bold text-gray-900">
+            المباني الأعلى أولوية
+          </h2>
+          <p className="mt-0.5 text-xs text-gray-400">
+            ترتيب تلقائي حسب الأعطال الحرجة والمفتوحة والصيانة المتأخرة عبر جميع الأقسام
+          </p>
+        </div>
+
+        {buildingPriorityData.length === 0 ? (
+          <p className="py-8 text-center text-sm text-gray-400">
+            لا توجد مبانٍ تحتاج اهتمامًا حاليًا
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 text-xs text-gray-400">
+                  <th className="px-3 py-2 text-start font-medium">المبنى</th>
+                  <th className="px-3 py-2 text-start font-medium">الأقسام المعنية</th>
+                  <th className="px-3 py-2 text-center font-medium">الأعطال المفتوحة</th>
+                  <th className="px-3 py-2 text-center font-medium">الحرجة</th>
+                  <th className="px-3 py-2 text-center font-medium">الصيانة المتأخرة</th>
+                </tr>
+              </thead>
+              <tbody>
+                {buildingPriorityData.map((building) => (
+                  <tr
+                    key={building.id}
+                    className="border-b border-gray-50 last:border-0 hover:bg-gray-50/70"
+                  >
+                    <td className="px-3 py-3">
+                      <div className="font-medium text-gray-900">
+                        {building.buildingNumber
+                          ? `مبنى ${building.buildingNumber}`
+                          : building.name}
+                      </div>
+                      {building.buildingNumber && building.name && (
+                        <div className="mt-0.5 text-xs text-gray-400">
+                          {building.name}
+                        </div>
+                      )}
+                    </td>
+
+                    <td className="px-3 py-3 text-gray-600">
+                      {building.departmentNames.length > 0
+                        ? building.departmentNames.join('، ')
+                        : '—'}
+                    </td>
+
+                    <td className="px-3 py-3 text-center font-semibold">
+                      {building.openFaultCount}
+                    </td>
+
+                    <td
+                      className={`px-3 py-3 text-center font-semibold ${
+                        building.criticalFaults > 0
+                          ? 'text-red-600'
+                          : 'text-gray-500'
+                      }`}
+                    >
+                      {building.criticalFaults}
+                    </td>
+
+                    <td className="px-3 py-3 text-center font-semibold">
+                      {building.overdueMaintenanceCount}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* مقارنة ديناميكية بين الأقسام */}
