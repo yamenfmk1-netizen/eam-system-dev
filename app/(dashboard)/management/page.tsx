@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import StatCard from '@/components/ui/StatCard';
-import { MonthlyFaultTrendChart } from '@/components/dashboard/DashboardCharts';
+import { DepartmentPerformanceChart, MonthlyFaultTrendChart } from '@/components/dashboard/DashboardCharts';
 import {
   AlertTriangle,
   Boxes,
@@ -529,6 +529,13 @@ export default async function ManagementPage() {
     return scoreB - scoreA || a.name.localeCompare(b.name, 'ar');
   });
 
+  const departmentComparisonData = sortedDepartments.map((department) => ({
+    department: department.name,
+    readiness: department.readiness,
+    pmCompletion: department.pmCompletion,
+    correctiveCompletion: department.correctiveCompletion,
+  }));
+
   const managementAlerts = sortedDepartments.flatMap((department) => {
     const alerts: string[] = [];
 
@@ -696,6 +703,19 @@ export default async function ManagementPage() {
           </p>
         </div>
         <MonthlyFaultTrendChart data={monthlyFaultTrendData} />
+      </div>
+
+      {/* مقارنة مؤشرات أداء الأقسام */}
+      <div className="card">
+        <div className="mb-3">
+          <h2 className="font-bold text-gray-900">
+            مقارنة أداء الأقسام
+          </h2>
+          <p className="mt-0.5 text-xs text-gray-400">
+            مقارنة الجاهزية وإنجاز الصيانة الوقائية والعلاجية لكل قسم
+          </p>
+        </div>
+        <DepartmentPerformanceChart data={departmentComparisonData} />
       </div>
 
       {/* مقارنة ديناميكية بين الأقسام */}
