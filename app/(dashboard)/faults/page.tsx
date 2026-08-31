@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { DEPARTMENT_CODE } from '@/lib/site-config';
+import { DEPARTMENT_CODE, IS_MANAGEMENT_SITE } from '@/lib/site-config';
 import FaultForm from '@/components/faults/FaultForm';
 import StatusBadge from '@/components/ui/StatusBadge';
 import { Plus, Search, Loader2 } from 'lucide-react';
@@ -32,25 +32,38 @@ export default function FaultsPage() {
 async function loadData() {
   setLoading(true);
 
-  const { data: department } = await supabase
-    .from('departments')
-    .select('id')
-    .eq('code', DEPARTMENT_CODE)
-    .single();
+  let faultsQuery = supabase
+    .from('faults')
+    .select('*, buildings(name), equipment(name, asset_id)')
+    .order('reported_at', { ascending: false });
 
-  if (!department) {
-    setFaults([]);
-    setBuildings([]);
-    setLoading(false);
-    return;
+  // مواقع الأقسام العادية:
+  // Electrical / HVAC / Mechanical / Civil
+  if (!IS_MANAGEMENT_SITE) {
+    const { data: department } = await supabase
+      .from('departments')
+      .select('id')
+      .eq('code', DEPARTMENT_CODE)
+      .single();
+
+    if (!department) {
+      setFaults([]);
+      setBuildings([]);
+      setLoading(false);
+      return;
+    }
+
+    faultsQuery = faultsQuery.eq(
+      'department_id',
+      department.id
+    );
   }
 
+  // موقع الإدارة:
+  // لا نضع department filter
+  // والـ RLS يعرض فقط الإدارات المسموح للمستخدم الوصول لها
   const [{ data: f }, { data: b }] = await Promise.all([
-    supabase
-      .from('faults')
-      .select('*, buildings(name), equipment(name, asset_id)')
-      .eq('department_id', department.id)
-      .order('reported_at', { ascending: false }),
+    faultsQuery,
 
     supabase
       .from('buildings')
