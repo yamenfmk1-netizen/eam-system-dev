@@ -1,107 +1,90 @@
 'use client';
 
 import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Pie,
   PieChart,
+  Pie,
+  Cell,
   ResponsiveContainer,
   Tooltip,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
+  CartesianGrid,
+  LineChart,
+  Line,
 } from 'recharts';
 
-const STATUS_COLORS = {
-  ready: '#16a34a',
-  under_maintenance: '#2f82ff',
+const STATUS_COLORS: Record<string, string> = {
+  available: '#16a34a',
+  running: '#16a34a',
+  standby: '#2f82ff',
+  under_maintenance: '#eab308',
   fault: '#dc2626',
   out_of_service: '#6b7280',
 };
 
-const STATUS_LABELS = {
-  ready: 'جاهزة',
+const STATUS_LABELS_AR: Record<string, string> = {
+  available: 'متاح',
+  running: 'يعمل',
+  standby: 'استعداد',
   under_maintenance: 'تحت الصيانة',
-  fault: 'عطل',
-  out_of_service: 'متوقفة',
+  fault: 'يوجد عطل',
+  out_of_service: 'خارج الخدمة',
 };
 
 export function EquipmentStatusChart({ data }: { data: { status: string; count: number }[] }) {
-  const countOf = (...statuses: string[]) =>
-    data.filter((d) => statuses.includes(d.status)).reduce((sum, d) => sum + d.count, 0);
+  const chartData = data.map((d) => ({
+    name: STATUS_LABELS_AR[d.status] ?? d.status,
+    value: d.count,
+    status: d.status,
+  }));
 
-  const chartData = [
-    { key: 'ready', name: STATUS_LABELS.ready, value: countOf('available', 'running', 'standby') },
-    { key: 'under_maintenance', name: STATUS_LABELS.under_maintenance, value: countOf('under_maintenance') },
-    { key: 'fault', name: STATUS_LABELS.fault, value: countOf('fault') },
-    { key: 'out_of_service', name: STATUS_LABELS.out_of_service, value: countOf('out_of_service') },
-  ];
-
-  const total = chartData.reduce((sum, item) => sum + item.value, 0);
-
-  if (total === 0) {
+  if (chartData.every((d) => d.value === 0)) {
     return <p className="py-10 text-center text-sm text-gray-400">لا توجد بيانات كافية بعد</p>;
   }
 
   return (
-    <div className="grid grid-cols-1 items-center gap-2 sm:grid-cols-5">
-      <div className="sm:col-span-3">
-        <ResponsiveContainer width="100%" height={220}>
-          <PieChart>
-            <Pie
-              data={chartData}
-              dataKey="value"
-              nameKey="name"
-              cx="50%"
-              cy="50%"
-              innerRadius={52}
-              outerRadius={82}
-              paddingAngle={2}
-              stroke="#ffffff"
-              strokeWidth={2}
-            >
-              {chartData.map((entry) => (
-                <Cell key={entry.key} fill={STATUS_COLORS[entry.key as keyof typeof STATUS_COLORS]} />
-              ))}
-            </Pie>
-            <Tooltip formatter={(value: number, name: string) => [`${value} معدة`, name]} />
-          </PieChart>
-        </ResponsiveContainer>
-      </div>
-
-      <div className="space-y-3 sm:col-span-2">
-        {chartData.map((item) => {
-          const pct = total > 0 ? Math.round((item.value / total) * 100) : 0;
-          return (
-            <div key={item.key} className="flex items-center justify-between gap-3 text-sm">
-              <div className="flex items-center gap-2 text-gray-600">
-                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: STATUS_COLORS[item.key as keyof typeof STATUS_COLORS] }} />
-                <span>{item.name}</span>
-              </div>
-              <span className="font-semibold text-gray-800">{pct}% <span className="font-normal text-gray-400">({item.value})</span></span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
+    <ResponsiveContainer width="100%" height={220}>
+      <PieChart>
+        <Pie
+          data={chartData}
+          dataKey="value"
+          nameKey="name"
+          cx="50%"
+          cy="50%"
+          innerRadius={50}
+          outerRadius={80}
+          paddingAngle={2}
+        >
+          {chartData.map((entry) => (
+            <Cell key={entry.status} fill={STATUS_COLORS[entry.status] ?? '#94a3b8'} />
+          ))}
+        </Pie>
+        <Tooltip />
+      </PieChart>
+    </ResponsiveContainer>
   );
 }
 
 export function FaultPriorityChart({ data }: { data: { priority: string; count: number }[] }) {
   const labels: Record<string, string> = {
-    critical: 'حرجة',
-    high: 'عالية',
-    medium: 'متوسطة',
     low: 'منخفضة',
+    medium: 'متوسطة',
+    high: 'عالية',
+    critical: 'حرجة',
   };
   const colors: Record<string, string> = {
-    critical: '#dc2626',
-    high: '#f59e0b',
-    medium: '#2f82ff',
     low: '#94a3b8',
+    medium: '#2f82ff',
+    high: '#eab308',
+    critical: '#dc2626',
   };
-  const chartData = data.map((d) => ({ name: labels[d.priority] ?? d.priority, value: d.count, priority: d.priority }));
+  const chartData = data.map((d) => ({
+    name: labels[d.priority] ?? d.priority,
+    value: d.count,
+    priority: d.priority,
+  }));
 
   if (chartData.every((d) => d.value === 0)) {
     return <p className="py-10 text-center text-sm text-gray-400">لا توجد أعطال مفتوحة حاليًا</p>;
@@ -109,17 +92,53 @@ export function FaultPriorityChart({ data }: { data: { priority: string; count: 
 
   return (
     <ResponsiveContainer width="100%" height={220}>
-      <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 24, top: 6, bottom: 6 }}>
-        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e5e7eb" />
-        <XAxis type="number" allowDecimals={false} fontSize={11} axisLine={false} tickLine={false} />
-        <YAxis type="category" dataKey="name" width={72} fontSize={12} axisLine={false} tickLine={false} />
-        <Tooltip formatter={(value: number) => [`${value}`, 'عدد الأعطال']} />
-        <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={20}>
+      <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 20 }}>
+        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+        <XAxis type="number" allowDecimals={false} fontSize={11} />
+        <YAxis type="category" dataKey="name" width={70} fontSize={12} />
+        <Tooltip />
+        <Bar dataKey="value" radius={[0, 6, 6, 0]}>
           {chartData.map((entry) => (
             <Cell key={entry.priority} fill={colors[entry.priority] ?? '#94a3b8'} />
           ))}
         </Bar>
       </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+export function MonthlyFaultTrendChart({
+  data,
+}: {
+  data: { month: string; count: number }[];
+}) {
+  if (data.every((item) => item.count === 0)) {
+    return (
+      <p className="py-14 text-center text-sm text-gray-400">
+        لا توجد أعطال مسجلة خلال آخر 6 أشهر
+      </p>
+    );
+  }
+
+  return (
+    <ResponsiveContainer width="100%" height={280}>
+      <LineChart data={data} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+        <XAxis dataKey="month" fontSize={12} />
+        <YAxis allowDecimals={false} fontSize={11} width={35} />
+        <Tooltip
+          formatter={(value: number) => [value, 'عدد الأعطال']}
+          labelFormatter={(label) => `الشهر: ${label}`}
+        />
+        <Line
+          type="monotone"
+          dataKey="count"
+          stroke="#2f82ff"
+          strokeWidth={3}
+          dot={{ r: 4 }}
+          activeDot={{ r: 6 }}
+        />
+      </LineChart>
     </ResponsiveContainer>
   );
 }
