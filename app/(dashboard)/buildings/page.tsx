@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { DEPARTMENT_CODE } from '@/lib/site-config';
+
+import {
+  DEPARTMENT_CODE,
+  IS_MANAGEMENT_SITE,
+} from '@/lib/site-config';
 
 import BuildingCard from '@/components/buildings/BuildingCard';
 import BuildingForm from '@/components/buildings/BuildingForm';
@@ -21,11 +25,23 @@ import type {
   BuildingCriticality,
 } from '@/types/database.types';
 
+type DepartmentOption = {
+  id: string;
+  name: string;
+  code: string;
+};
+
 export default function BuildingsPage() {
   const supabase = createClient();
 
   const [buildings, setBuildings] =
     useState<Building[]>([]);
+
+  const [departments, setDepartments] =
+    useState<DepartmentOption[]>([]);
+
+  const [departmentFilter, setDepartmentFilter] =
+    useState('all');
 
   const [loading, setLoading] =
     useState(true);
@@ -49,51 +65,202 @@ export default function BuildingsPage() {
   const [showForm, setShowForm] =
     useState(false);
 
+  // =========================================================
+  // تحميل المباني
+  // =========================================================
+
   async function loadBuildings() {
     setLoading(true);
 
     try {
-      // =========================================
-      // 1) معرفة القسم الخاص بالموقع الحالي
-      // =========================================
-      const {
-        data: department,
-        error: departmentError,
-      } = await supabase
-        .from('departments')
-        .select('id')
-        .eq('code', DEPARTMENT_CODE)
-        .single();
+      let targetDepartmentIds: string[] = [];
 
-      if (
-        departmentError ||
-        !department
-      ) {
-        console.error(
-          'Department not found:',
-          DEPARTMENT_CODE,
-          departmentError
+      // =====================================================
+      // موقع الإدارة
+      // =====================================================
+
+      if (IS_MANAGEMENT_SITE) {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        if (!user) {
+          setBuildings([]);
+          setDepartments([]);
+          return;
+        }
+
+        // الإدارات المسموح للمستخدم بها
+        const {
+          data: userDepartments,
+          error: userDepartmentsError,
+        } = await supabase
+          .from('user_departments')
+          .select('department_id')
+          .eq('user_id', user.id);
+
+        if (userDepartmentsError) {
+          console.error(
+            'Error loading user departments:',
+            userDepartmentsError
+          );
+
+          setBuildings([]);
+          setDepartments([]);
+          return;
+        }
+
+        const allowedDepartmentIds = Array.from(
+          new Set(
+            (userDepartments ?? [])
+              .map((item) => item.department_id)
+              .filter(
+                (id): id is string =>
+                  Boolean(id)
+              )
+          )
         );
 
+        if (
+          allowedDepartmentIds.length === 0
+        ) {
+          setBuildings([]);
+          setDepartments([]);
+          return;
+        }
+
+        // بيانات الإدارات المسموح بها
+        const {
+          data: allowedDepartments,
+          error: departmentsError,
+        } = await supabase
+          .from('departments')
+          .select('id,name,code')
+          .in(
+            'id',
+            allowedDepartmentIds
+          )
+          .order('name');
+
+        if (departmentsError) {
+          console.error(
+            'Error loading departments:',
+            departmentsError
+          );
+
+          setBuildings([]);
+          setDepartments([]);
+          return;
+        }
+
+        const departmentList =
+          (allowedDepartments ??
+            []) as DepartmentOption[];
+
+        setDepartments(
+          departmentList
+        );
+
+        // إذا جميع الإدارات
+        if (
+          departmentFilter === 'all'
+        ) {
+          targetDepartmentIds =
+            departmentList.map(
+              (department) =>
+                department.id
+            );
+        } else {
+          // حماية:
+          // لا نستخدم إدارة غير مصرح بها
+          const selectedDepartment =
+            departmentList.find(
+              (department) =>
+                department.id ===
+                departmentFilter
+            );
+
+          if (!selectedDepartment) {
+            setBuildings([]);
+            return;
+          }
+
+          targetDepartmentIds = [
+            selectedDepartment.id,
+          ];
+        }
+      }
+
+      // =====================================================
+      // مواقع الأقسام العادية
+      // Electrical / HVAC / Mechanical / Civil
+      // =====================================================
+
+      else {
+        const {
+          data: department,
+          error: departmentError,
+        } = await supabase
+          .from('departments')
+          .select('id')
+          .eq(
+            'code',
+            DEPARTMENT_CODE
+          )
+          .single();
+
+        if (
+          departmentError ||
+          !department
+        ) {
+          console.error(
+            'Department not found:',
+            DEPARTMENT_CODE,
+            departmentError
+          );
+
+          setBuildings([]);
+          return;
+        }
+
+        targetDepartmentIds = [
+          department.id,
+        ];
+      }
+
+      // =====================================================
+      // إذا ما عندنا أي إدارة نستهدفها
+      // =====================================================
+
+      if (
+        targetDepartmentIds.length === 0
+      ) {
         setBuildings([]);
         return;
       }
 
-      // =========================================
-      // 2) جلب أصول هذا القسم فقط
-      // =========================================
+      // =====================================================
+      // جلب أصول الإدارات المطلوبة
+      // =====================================================
+
       const {
         data: departmentEquipment,
         error: equipmentError,
       } = await supabase
         .from('equipment')
-        .select('id,building_id')
-        .eq(
+        .select(
+          'id,building_id,department_id'
+        )
+        .in(
           'department_id',
-          department.id
+          targetDepartmentIds
         )
         .is('deleted_at', null)
-        .not('building_id', 'is', null);
+        .not(
+          'building_id',
+          'is',
+          null
+        );
 
       if (equipmentError) {
         console.error(
@@ -105,9 +272,15 @@ export default function BuildingsPage() {
         return;
       }
 
-      // =========================================
-      // 3) حساب عدد أصول القسم داخل كل مبنى
-      // =========================================
+      // =====================================================
+      // حساب عدد الأصول داخل كل مبنى
+      //
+      // في موقع الإدارة:
+      // - All = مجموع أصول الإدارات المسموحة
+      // - HVAC = أصول HVAC فقط
+      // - Electrical = أصول Electrical فقط
+      // =====================================================
+
       const equipmentCountByBuilding =
         new Map<string, number>();
 
@@ -128,21 +301,25 @@ export default function BuildingsPage() {
         );
       });
 
-      // =========================================
-      // 4) استخراج المباني التي فيها أصول للقسم
-      // =========================================
+      // =====================================================
+      // المباني التي تحتوي أصول للإدارة المختارة
+      // =====================================================
+
       const buildingIds = Array.from(
         equipmentCountByBuilding.keys()
       );
 
-      if (buildingIds.length === 0) {
+      if (
+        buildingIds.length === 0
+      ) {
         setBuildings([]);
         return;
       }
 
-      // =========================================
-      // 5) جلب هذه المباني فقط
-      // =========================================
+      // =====================================================
+      // جلب المباني فقط
+      // =====================================================
+
       const {
         data,
         error: buildingsError,
@@ -163,9 +340,10 @@ export default function BuildingsPage() {
         return;
       }
 
-      // =========================================
-      // 6) إضافة عدد أصول القسم لكل مبنى
-      // =========================================
+      // =====================================================
+      // إضافة عدد الأصول حسب الإدارة المختارة
+      // =====================================================
+
       const mapped = (
         data ?? []
       ).map((building: any) => ({
@@ -178,31 +356,47 @@ export default function BuildingsPage() {
       }));
 
       setBuildings(mapped);
+    } catch (error) {
+      console.error(
+        'Unexpected buildings error:',
+        error
+      );
+
+      setBuildings([]);
     } finally {
       setLoading(false);
     }
   }
 
+  // =========================================================
+  // إعادة التحميل عند تغيير الإدارة
+  // =========================================================
+
   useEffect(() => {
     loadBuildings();
-  }, []);
+  }, [departmentFilter]);
 
-  // =========================================
-  // المحطات / المواقع الموجودة ضمن مباني القسم
-  // =========================================
+  // =========================================================
+  // المحطات / المواقع الموجودة ضمن النتائج الحالية
+  // =========================================================
+
   const stations = Array.from(
     new Set(
       buildings
         .map((b) => b.station)
-        .filter(Boolean)
+        .filter(
+          (station): station is string =>
+            Boolean(station)
+        )
     )
   ).sort((a, b) =>
     a.localeCompare(b, 'ar')
   );
 
-  // =========================================
+  // =========================================================
   // Filters
-  // =========================================
+  // =========================================================
+
   const filtered =
     buildings.filter((b) => {
       const q =
@@ -225,7 +419,8 @@ export default function BuildingsPage() {
 
       const matchesStation =
         stationFilter === 'all' ||
-        b.station === stationFilter;
+        b.station ===
+          stationFilter;
 
       const matchesCriticality =
         criticalityFilter ===
@@ -241,16 +436,18 @@ export default function BuildingsPage() {
       );
     });
 
-  // =========================================
+  // =========================================================
   // ترتيب المباني الحرجة أولاً
-  // =========================================
+  // =========================================================
+
   const sortedFiltered = [
     ...filtered,
   ].sort((a, b) => {
     if (
       a.criticality ===
         'critical' &&
-      b.criticality !== 'critical'
+      b.criticality !==
+        'critical'
     ) {
       return -1;
     }
@@ -258,7 +455,8 @@ export default function BuildingsPage() {
     if (
       a.criticality !==
         'critical' &&
-      b.criticality === 'critical'
+      b.criticality ===
+        'critical'
     ) {
       return 1;
     }
@@ -272,9 +470,16 @@ export default function BuildingsPage() {
     );
   });
 
+  // =========================================================
+  // الصفحة
+  // =========================================================
+
   return (
     <div className="space-y-5">
-      {/* Header */}
+      {/* =====================================================
+          Header
+          ===================================================== */}
+
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-bold text-gray-900">
@@ -298,9 +503,13 @@ export default function BuildingsPage() {
         </button>
       </div>
 
-      {/* Filters */}
+      {/* =====================================================
+          Filters
+          ===================================================== */}
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         {/* Search */}
+
         <div className="relative flex-1">
           <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
 
@@ -316,7 +525,51 @@ export default function BuildingsPage() {
           />
         </div>
 
+        {/* ===================================================
+            Department Filter
+            يظهر فقط في موقع الإدارة
+            =================================================== */}
+
+        {IS_MANAGEMENT_SITE && (
+          <select
+            value={
+              departmentFilter
+            }
+            onChange={(e) => {
+              setDepartmentFilter(
+                e.target.value
+              );
+
+              // إعادة فلتر الموقع عند تغيير الإدارة
+              setStationFilter(
+                'all'
+              );
+            }}
+            className="input-field sm:w-48"
+          >
+            <option value="all">
+              جميع الإدارات
+            </option>
+
+            {departments.map(
+              (department) => (
+                <option
+                  key={
+                    department.id
+                  }
+                  value={
+                    department.id
+                  }
+                >
+                  {department.name}
+                </option>
+              )
+            )}
+          </select>
+        )}
+
         {/* Station */}
+
         <div className="relative sm:w-56">
           <MapPin className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
 
@@ -347,6 +600,7 @@ export default function BuildingsPage() {
         </div>
 
         {/* Criticality */}
+
         <div className="relative sm:w-44">
           <ShieldAlert className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
 
@@ -378,11 +632,14 @@ export default function BuildingsPage() {
         </div>
 
         {/* Status */}
+
         <select
           value={statusFilter}
           onChange={(e) =>
             setStatusFilter(
-              e.target.value as any
+              e.target.value as
+                | BuildingStatus
+                | 'all'
             )
           }
           className="input-field sm:w-56"
@@ -409,7 +666,10 @@ export default function BuildingsPage() {
         </select>
       </div>
 
-      {/* Buildings */}
+      {/* =====================================================
+          Buildings
+          ===================================================== */}
+
       {loading ? (
         <div className="flex justify-center py-20 text-gray-400">
           <Loader2 className="h-6 w-6 animate-spin" />
@@ -432,7 +692,10 @@ export default function BuildingsPage() {
         </div>
       )}
 
-      {/* Add Building */}
+      {/* =====================================================
+          Add Building
+          ===================================================== */}
+
       {showForm && (
         <BuildingForm
           stations={stations}
