@@ -276,6 +276,45 @@ export default function TestsPage() {
     );
   });
 
+  // الاختبارات القادمة: تُعرض في خانة مستقلة عن سجل الاختبارات.
+  // تعتمد على next_test_date وتراعي فلتر الإدارة في موقع الإدارة.
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  const upcomingTests = tests
+    .filter((t) => {
+      if (!t.next_test_date) return false;
+
+      const nextDate = new Date(`${t.next_test_date}T00:00:00`);
+
+      const matchesDepartment =
+        !IS_MANAGEMENT_SITE ||
+        departmentFilter === 'all' ||
+        t.department_id === departmentFilter;
+
+      return nextDate >= todayStart && matchesDepartment;
+    })
+    .sort(
+      (a, b) =>
+        new Date(`${a.next_test_date}T00:00:00`).getTime() -
+        new Date(`${b.next_test_date}T00:00:00`).getTime()
+    );
+
+  function daysUntil(dateValue: string) {
+    const target = new Date(`${dateValue}T00:00:00`);
+    const diff = target.getTime() - todayStart.getTime();
+    return Math.round(diff / 86400000);
+  }
+
+  function upcomingDateLabel(dateValue: string) {
+    const days = daysUntil(dateValue);
+
+    if (days === 0) return 'اليوم';
+    if (days === 1) return 'غدًا';
+    if (days === 2) return 'بعد يومين';
+    return `بعد ${days} أيام`;
+  }
+
   const resultTone = (r: string) =>
     r === 'passed'
       ? 'ready'
@@ -364,6 +403,111 @@ export default function TestsPage() {
             تسجيل اختبار
           </button>
         </div>
+      </div>
+
+      {/* =====================================================
+          Upcoming Tests - Independent Section
+          ===================================================== */}
+
+      <div className="card overflow-hidden p-0">
+        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+          <div>
+            <h2 className="font-semibold text-gray-900">
+              الاختبارات القادمة
+            </h2>
+            <p className="mt-0.5 text-xs text-gray-500">
+              الاختبارات المجدولة حسب تاريخ الاختبار القادم
+            </p>
+          </div>
+
+          {!loading && (
+            <span className="rounded-full bg-primary-50 px-3 py-1 text-xs font-medium text-primary-700">
+              {upcomingTests.length}
+            </span>
+          )}
+        </div>
+
+        {loading ? (
+          <div className="flex justify-center py-10 text-gray-400">
+            <Loader2 className="h-5 w-5 animate-spin" />
+          </div>
+        ) : upcomingTests.length === 0 ? (
+          <div className="py-10 text-center text-sm text-gray-400">
+            لا توجد اختبارات قادمة مجدولة
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50 text-right text-xs text-gray-500">
+                  <th className="px-4 py-3">موعد الاختبار</th>
+                  <th className="px-4 py-3">المبنى</th>
+                  <th className="px-4 py-3">المعدة</th>
+                  <th className="px-4 py-3">نوع الاختبار</th>
+                  <th className="px-4 py-3">متبقي</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {upcomingTests.map((t) => {
+                  const remainingDays = daysUntil(t.next_test_date);
+
+                  return (
+                    <tr
+                      key={`upcoming-${t.id}`}
+                      className="border-b border-gray-50 last:border-b-0 hover:bg-gray-50"
+                    >
+                      <td className="px-4 py-3 font-medium text-gray-800">
+                        {new Date(
+                          `${t.next_test_date}T00:00:00`
+                        ).toLocaleDateString('ar-SA')}
+                      </td>
+
+                      <td className="px-4 py-3 text-gray-500">
+                        {t.buildings?.name ?? '—'}
+                      </td>
+
+                      <td className="px-4 py-3 text-gray-500">
+                        {t.equipment?.name ?? '—'}
+                      </td>
+
+                      <td className="px-4 py-3 text-gray-500">
+                        {TEST_TYPE_LABELS[
+                          t.test_type as keyof typeof TEST_TYPE_LABELS
+                        ] ?? t.test_type}
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
+                            remainingDays <= 3
+                              ? 'bg-red-50 text-red-700'
+                              : remainingDays <= 7
+                                ? 'bg-amber-50 text-amber-700'
+                                : 'bg-blue-50 text-blue-700'
+                          }`}
+                        >
+                          {upcomingDateLabel(t.next_test_date)}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* =====================================================
+          Test Records / History
+          ===================================================== */}
+
+      <div>
+        <h2 className="font-semibold text-gray-900">سجل الاختبارات</h2>
+        <p className="mt-0.5 text-xs text-gray-500">
+          جميع الاختبارات المسجلة ونتائجها
+        </p>
       </div>
 
       {/* =====================================================
