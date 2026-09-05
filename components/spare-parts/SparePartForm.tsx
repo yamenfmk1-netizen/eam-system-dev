@@ -80,7 +80,7 @@ export default function SparePartForm({
       setLoadingDepartmentData(true);
 
       try {
-        // 1) نحدد القسم تلقائيًا من الموقع الحالي.
+        // 1) تحديد القسم تلقائيًا حسب الموقع الحالي.
         const {
           data: department,
           error: departmentError,
@@ -98,13 +98,14 @@ export default function SparePartForm({
 
         setDepartmentId(department.id);
 
-        // 2) نقرأ أنواع المعدات الموجودة فعليًا في هذا القسم فقط.
+        // 2) قراءة أنواع المعدات الموجودة فعليًا داخل هذا القسم.
+        // اسم العمود الصحيح في جدول equipment هو: type
         const {
           data: equipmentRows,
           error: equipmentError,
         } = await supabase
           .from('equipment')
-          .select('equipment_type')
+          .select('type')
           .eq('department_id', department.id)
           .is('deleted_at', null);
 
@@ -115,10 +116,10 @@ export default function SparePartForm({
         const uniqueTypes = Array.from(
           new Set(
             (equipmentRows ?? [])
-              .map((row: any) => row.equipment_type)
+              .map((row: any) => row.type)
               .filter(
                 (value: unknown): value is string =>
-                  typeof value === 'string' && value.length > 0
+                  typeof value === 'string' && value.trim().length > 0
               )
           )
         ).sort((a, b) => {
@@ -129,15 +130,12 @@ export default function SparePartForm({
           return labelA.localeCompare(labelB, 'ar');
         });
 
-        // عند تعديل قطعة قديمة، نضمن أن نوعها الحالي يظل ظاهرًا
-        // حتى لو لم تعد توجد معدة حالية من نفس النوع.
+        // عند تعديل قطعة قديمة، أبقِ نوعها الحالي ظاهرًا حتى لو لم توجد
+        // معدة حالية من نفس النوع.
         const currentType = sparePart?.compatible_equipment_type ?? null;
 
-        if (
-          currentType &&
-          !uniqueTypes.includes(currentType as string)
-        ) {
-          uniqueTypes.push(currentType as string);
+        if (currentType && !uniqueTypes.includes(String(currentType))) {
+          uniqueTypes.push(String(currentType));
         }
 
         if (!cancelled) {
@@ -148,8 +146,7 @@ export default function SparePartForm({
           setDepartmentId(null);
           setEquipmentTypes([]);
           toast.error(
-            err?.message ??
-              'تعذر تحميل بيانات القسم وأنواع المعدات'
+            err?.message ?? 'تعذر تحميل بيانات القسم وأنواع المعدات'
           );
         }
       } finally {
@@ -171,13 +168,11 @@ export default function SparePartForm({
   function equipmentTypeLabel(value: string) {
     return (
       (EQUIPMENT_TYPE_LABELS as Record<string, string>)[value] ??
-      value.replaceAll('_', ' ')
+      value.replace(/_/g, ' ')
     );
   }
 
-  function handleImageChange(
-    e: React.ChangeEvent<HTMLInputElement>
-  ) {
+  function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] ?? null;
 
     setImageError(null);
@@ -210,7 +205,7 @@ export default function SparePartForm({
     try {
       if (!departmentId) {
         throw new Error(
-          'تعذر تحديد القسم. أعد فتح النافذة وحاول مرة أخرى.'
+          'تعذر تحديد القسم. أغلق النافذة وافتحها مرة أخرى ثم حاول.'
         );
       }
 
@@ -221,8 +216,7 @@ export default function SparePartForm({
       }
 
       const payload: any = {
-        // القسم لا يختاره المستخدم يدويًا.
-        // يتم ربط القطعة تلقائيًا بقسم الموقع الحالي.
+        // القسم يُحفظ تلقائيًا حسب الموقع، بدون اختيار يدوي.
         department_id: departmentId,
 
         part_name: values.part_name,
@@ -237,11 +231,9 @@ export default function SparePartForm({
         price: values.price ? Number(values.price) : null,
         purchase_date: values.purchase_date || null,
         expiry_date: values.expiry_date || null,
-        warranty_start_date:
-          values.warranty_start_date || null,
+        warranty_start_date: values.warranty_start_date || null,
         warranty_end_date: values.warranty_end_date || null,
-        warranty_provider:
-          values.warranty_provider || null,
+        warranty_provider: values.warranty_provider || null,
         notes: values.notes || null,
       };
 
@@ -271,9 +263,7 @@ export default function SparePartForm({
       onSaved();
       onClose();
     } catch (err: any) {
-      toast.error(
-        err.message ?? 'حدث خطأ، حاول مرة أخرى'
-      );
+      toast.error(err.message ?? 'حدث خطأ، حاول مرة أخرى');
     } finally {
       setLoading(false);
     }
@@ -284,9 +274,7 @@ export default function SparePartForm({
       <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
         <div className="mb-5 flex items-center justify-between">
           <h2 className="text-lg font-bold text-gray-900">
-            {sparePart
-              ? 'تعديل قطعة الغيار'
-              : 'إضافة قطعة غيار'}
+            {sparePart ? 'تعديل قطعة الغيار' : 'إضافة قطعة غيار'}
           </h2>
 
           <button
@@ -303,17 +291,11 @@ export default function SparePartForm({
           className="grid grid-cols-1 gap-4 sm:grid-cols-2"
         >
           <div>
-            <label className="label-field">
-              اسم القطعة *
-            </label>
-
+            <label className="label-field">اسم القطعة *</label>
             <input
-              {...register('part_name', {
-                required: 'مطلوب',
-              })}
+              {...register('part_name', { required: 'مطلوب' })}
               className="input-field"
             />
-
             {errors.part_name && (
               <p className="mt-1 text-xs text-red-600">
                 {errors.part_name.message}
@@ -322,10 +304,7 @@ export default function SparePartForm({
           </div>
 
           <div>
-            <label className="label-field">
-              Part Number
-            </label>
-
+            <label className="label-field">Part Number</label>
             <input
               {...register('part_number')}
               className="input-field"
@@ -334,10 +313,7 @@ export default function SparePartForm({
           </div>
 
           <div>
-            <label className="label-field">
-              الشركة المصنعة
-            </label>
-
+            <label className="label-field">الشركة المصنعة</label>
             <input
               {...register('manufacturer')}
               className="input-field"
@@ -345,14 +321,10 @@ export default function SparePartForm({
           </div>
 
           <div>
-            <label className="label-field">
-              نوع المعدات المناسبة
-            </label>
+            <label className="label-field">نوع المعدات المناسبة</label>
 
             <select
-              {...register(
-                'compatible_equipment_type'
-              )}
+              {...register('compatible_equipment_type')}
               className="input-field"
               disabled={loadingDepartmentData}
             >
@@ -363,34 +335,24 @@ export default function SparePartForm({
               </option>
 
               {equipmentTypes.map((value) => (
-                <option
-                  key={value}
-                  value={value}
-                >
+                <option key={value} value={value}>
                   {equipmentTypeLabel(value)}
                 </option>
               ))}
             </select>
 
-            {!loadingDepartmentData &&
-              equipmentTypes.length === 0 && (
-                <p className="mt-1 text-xs text-amber-600">
-                  لا توجد أنواع معدات مسجلة لهذا
-                  القسم حاليًا. يمكنك ترك الخيار
-                  «غير محدد».
-                </p>
-              )}
+            {!loadingDepartmentData && equipmentTypes.length === 0 && (
+              <p className="mt-1 text-xs text-amber-600">
+                لا توجد أنواع معدات مسجلة لهذا القسم حاليًا. يمكنك ترك
+                الخيار «غير محدد».
+              </p>
+            )}
           </div>
 
           <div>
-            <label className="label-field">
-              الكمية المتوفرة *
-            </label>
-
+            <label className="label-field">الكمية المتوفرة *</label>
             <input
-              {...register('quantity_available', {
-                required: true,
-              })}
+              {...register('quantity_available', { required: true })}
               type="number"
               step="1"
               className="input-field"
@@ -399,14 +361,9 @@ export default function SparePartForm({
           </div>
 
           <div>
-            <label className="label-field">
-              الحد الأدنى للمخزون *
-            </label>
-
+            <label className="label-field">الحد الأدنى للمخزون *</label>
             <input
-              {...register('minimum_stock', {
-                required: true,
-              })}
+              {...register('minimum_stock', { required: true })}
               type="number"
               step="1"
               className="input-field"
@@ -415,10 +372,7 @@ export default function SparePartForm({
           </div>
 
           <div>
-            <label className="label-field">
-              موقع التخزين
-            </label>
-
+            <label className="label-field">موقع التخزين</label>
             <input
               {...register('storage_location')}
               className="input-field"
@@ -426,21 +380,12 @@ export default function SparePartForm({
           </div>
 
           <div>
-            <label className="label-field">
-              المورد
-            </label>
-
-            <input
-              {...register('supplier')}
-              className="input-field"
-            />
+            <label className="label-field">المورد</label>
+            <input {...register('supplier')} className="input-field" />
           </div>
 
           <div>
-            <label className="label-field">
-              السعر
-            </label>
-
+            <label className="label-field">السعر</label>
             <input
               {...register('price')}
               type="number"
@@ -451,10 +396,7 @@ export default function SparePartForm({
           </div>
 
           <div>
-            <label className="label-field">
-              تاريخ الشراء
-            </label>
-
+            <label className="label-field">تاريخ الشراء</label>
             <input
               {...register('purchase_date')}
               type="date"
@@ -463,10 +405,7 @@ export default function SparePartForm({
           </div>
 
           <div>
-            <label className="label-field">
-              تاريخ الانتهاء (إن وجد)
-            </label>
-
+            <label className="label-field">تاريخ الانتهاء (إن وجد)</label>
             <input
               {...register('expiry_date')}
               type="date"
@@ -481,51 +420,32 @@ export default function SparePartForm({
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div>
-                <label className="label-field">
-                  بداية الضمان
-                </label>
-
+                <label className="label-field">بداية الضمان</label>
                 <input
-                  {...register(
-                    'warranty_start_date'
-                  )}
+                  {...register('warranty_start_date')}
                   type="date"
                   className="input-field"
                 />
               </div>
 
               <div>
-                <label className="label-field">
-                  انتهاء الضمان
-                </label>
-
+                <label className="label-field">انتهاء الضمان</label>
                 <input
-                  {...register(
-                    'warranty_end_date'
-                  )}
+                  {...register('warranty_end_date')}
                   type="date"
                   className="input-field"
                 />
-
                 {errors.warranty_end_date && (
                   <p className="mt-1 text-xs text-red-600">
-                    {
-                      errors.warranty_end_date
-                        .message
-                    }
+                    {errors.warranty_end_date.message}
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="label-field">
-                  جهة الضمان
-                </label>
-
+                <label className="label-field">جهة الضمان</label>
                 <input
-                  {...register(
-                    'warranty_provider'
-                  )}
+                  {...register('warranty_provider')}
                   className="input-field"
                   placeholder="المورد أو الوكيل"
                 />
@@ -537,18 +457,14 @@ export default function SparePartForm({
                 className={`mt-3 text-xs ${
                   warrantyState === 'expired'
                     ? 'text-red-600'
-                    : warrantyState ===
-                        'expiring_soon'
+                    : warrantyState === 'expiring_soon'
                       ? 'text-amber-600'
                       : 'text-emerald-600'
                 }`}
               >
                 {warrantyState === 'expired'
-                  ? `الضمان منتهٍ منذ ${Math.abs(
-                      warrantyDays ?? 0
-                    )} يومًا`
-                  : warrantyState ===
-                      'expiring_soon'
+                  ? `الضمان منتهٍ منذ ${Math.abs(warrantyDays ?? 0)} يومًا`
+                  : warrantyState === 'expiring_soon'
                     ? `ينتهي الضمان خلال ${warrantyDays} يومًا`
                     : `الضمان ساري — متبقٍ ${warrantyDays} يومًا`}
               </p>
@@ -556,29 +472,20 @@ export default function SparePartForm({
           </div>
 
           <div>
-            <label className="label-field">
-              صورة القطعة
-            </label>
-
+            <label className="label-field">صورة القطعة</label>
             <input
               type="file"
               accept="image/jpeg,image/png,image/jpg"
               onChange={handleImageChange}
               className="input-field"
             />
-
             {imageError && (
-              <p className="mt-1 text-xs text-red-600">
-                {imageError}
-              </p>
+              <p className="mt-1 text-xs text-red-600">{imageError}</p>
             )}
           </div>
 
           <div className="sm:col-span-2">
-            <label className="label-field">
-              ملاحظات
-            </label>
-
+            <label className="label-field">ملاحظات</label>
             <textarea
               {...register('notes')}
               rows={2}
@@ -597,19 +504,13 @@ export default function SparePartForm({
 
             <button
               type="submit"
-              disabled={
-                loading || loadingDepartmentData
-              }
+              disabled={loading || loadingDepartmentData}
               className="btn-primary flex-1"
             >
-              {(loading ||
-                loadingDepartmentData) && (
+              {(loading || loadingDepartmentData) && (
                 <Loader2 className="h-4 w-4 animate-spin" />
               )}
-
-              {sparePart
-                ? 'حفظ التعديلات'
-                : 'إضافة القطعة'}
+              {sparePart ? 'حفظ التعديلات' : 'إضافة القطعة'}
             </button>
           </div>
         </form>
