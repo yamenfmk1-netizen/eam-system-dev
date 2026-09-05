@@ -377,7 +377,7 @@ export default function SparePartForm({
                 <p className="mt-1 text-xs text-amber-600">
                   لا توجد أنواع معدات مسجلة لهذا
                   القسم حاليًا. يمكنك ترك الخيار
-                  "غير محدد".
+                  «غير محدد».
                 </p>
               )}
           </div>
