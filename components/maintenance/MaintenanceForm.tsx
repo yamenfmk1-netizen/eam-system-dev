@@ -1,3 +1,4 @@
+// MaintenanceForm FIXED V4 - spare parts filtered by department - 2026-09-05
 'use client';
 
 // MaintenanceForm inventory integration v2
@@ -172,12 +173,31 @@ export default function MaintenanceForm({
 
   useEffect(() => {
     async function loadSpareParts() {
+      // نحدد القسم الخاص بالموقع الحالي أولًا، ثم نعرض قطع غياره فقط.
+      const { data: department, error: departmentError } = await supabase
+        .from('departments')
+        .select('id')
+        .eq('code', DEPARTMENT_CODE)
+        .single();
+
+      if (departmentError || !department) {
+        setSpareParts([]);
+        toast.error(
+          lang === 'ar'
+            ? 'تعذر تحديد قسم قطع الغيار'
+            : 'Could not determine spare-parts department'
+        );
+        return;
+      }
+
       const { data, error } = await supabase
         .from('spare_parts')
         .select('id, part_name, part_number, quantity_available')
+        .eq('department_id', department.id)
         .order('part_name');
 
       if (error) {
+        setSpareParts([]);
         toast.error(
           lang === 'ar'
             ? 'تعذر تحميل قطع الغيار'
