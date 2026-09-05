@@ -1,5 +1,7 @@
 'use client';
 
+// MaintenanceForm inventory integration v2
+
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { X, Loader2, Plus, Trash2 } from 'lucide-react';
@@ -474,12 +476,11 @@ export default function MaintenanceForm({
         finalStatus === 'completed' &&
         originalStatus !== 'completed';
 
-      const statusBeforeParts: FormValues['status'] =
-        isCompletingNow
-          ? originalStatus && originalStatus !== 'completed'
-            ? originalStatus
-            : 'in_progress'
-          : finalStatus;
+      let statusBeforeParts: FormValues['status'] = finalStatus;
+
+      if (isCompletingNow) {
+        statusBeforeParts = originalStatus ?? 'in_progress';
+      }
 
       const sparePartsSummary = buildSparePartsSummary();
 
