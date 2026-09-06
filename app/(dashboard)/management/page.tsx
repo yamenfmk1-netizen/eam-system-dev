@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import StatCard from '@/components/ui/StatCard';
 import DepartmentMetricsPanel from '@/components/dashboard/DepartmentMetricsPanel';
 import ManagementAlertsPanel from '@/components/dashboard/ManagementAlertsPanel';
@@ -11,10 +12,12 @@ import {
   CalendarClock,
   ClipboardCheck,
   Gauge,
+  History,
   PackageX,
   RefreshCcw,
   ShieldAlert,
   Wrench,
+  ArrowLeft,
 } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -27,6 +30,50 @@ const OPEN_FAULT_STATUSES = [
   'in_progress',
   'waiting_for_spare_parts',
 ];
+
+const AUDIT_ACTION_LABELS: Record<string, string> = {
+  add: 'إضافة',
+  edit: 'تعديل',
+  delete: 'حذف',
+  upload: 'رفع ملف',
+  close_fault: 'إغلاق عطل',
+  complete_maintenance: 'إكمال صيانة',
+  complete_test: 'إكمال اختبار',
+};
+
+const AUDIT_TABLE_LABELS: Record<string, string> = {
+  buildings: 'المباني',
+  equipment: 'المعدات',
+  tests: 'الاختبارات',
+  maintenance_records: 'الصيانة',
+  maintenance_schedules: 'خطط الصيانة',
+  faults: 'الأعطال',
+  spare_parts: 'قطع الغيار',
+};
+
+function auditRecordLabel(log: any) {
+  const value = log.new_value ?? log.old_value ?? {};
+
+  return (
+    value.fault_number ??
+    value.maintenance_number ??
+    value.test_number ??
+    value.asset_id ??
+    value.part_number ??
+    value.part_name ??
+    value.building_number ??
+    value.name ??
+    '—'
+  );
+}
+
+function formatAuditDate(value: string) {
+  return new Date(value).toLocaleString('ar-SA', {
+    timeZone: 'Asia/Riyadh',
+    dateStyle: 'short',
+    timeStyle: 'short',
+  });
+}
 
 type Department = {
   id: string;
@@ -124,6 +171,7 @@ export default async function ManagementPage() {
     { data: spareParts },
     { data: closedMonthFaults },
     { data: sixMonthFaults },
+    { data: recentAuditLogs },
   ] = await Promise.all([
     supabase
       .from('departments')
@@ -190,6 +238,15 @@ export default async function ManagementPage() {
       .in('department_id', departmentIds)
       .gte('reported_at', `${sixMonthsStartStr}T00:00:00+03:00`)
       .lte('reported_at', now.toISOString()),
+
+    supabase
+      .from('audit_logs')
+      .select(
+        'id,user_name,action,table_name,record_id,department_id,old_value,new_value,created_at'
+      )
+      .in('department_id', departmentIds)
+      .order('created_at', { ascending: false })
+      .limit(10),
   ]);
 
   const departmentList = (departments ?? []) as Department[];
@@ -1054,6 +1111,78 @@ export default async function ManagementPage() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* آخر التحديثات */}
+      <div className="card">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <History className="h-5 w-5 text-gray-600" />
+            <div>
+              <h2 className="font-bold text-gray-900">آخر التحديثات</h2>
+              <p className="mt-0.5 text-xs text-gray-400">
+                آخر 10 أحداث من الأقسام المسموح لهذا الحساب برؤيتها
+              </p>
+            </div>
+          </div>
+
+          <Link
+            href="/audit-log"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-primary-600 hover:underline"
+          >
+            عرض السجل كامل
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
+        </div>
+
+        {(recentAuditLogs ?? []).length === 0 ? (
+          <p className="py-8 text-center text-sm text-gray-400">
+            لا توجد تحديثات مرتبطة بالأقسام حاليًا
+          </p>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {(recentAuditLogs ?? []).map((log: any) => (
+              <div
+                key={log.id}
+                className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium text-gray-900">
+                      {AUDIT_ACTION_LABELS[log.action] ?? log.action}
+                    </span>
+                    <span className="text-gray-300">•</span>
+                    <span className="text-sm text-gray-600">
+                      {AUDIT_TABLE_LABELS[log.table_name] ?? log.table_name}
+                    </span>
+                    {auditRecordLabel(log) !== '—' && (
+                      <>
+                        <span className="text-gray-300">•</span>
+                        <span className="text-sm font-medium text-gray-700" dir="ltr">
+                          {auditRecordLabel(log)}
+                        </span>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-gray-400">
+                    <span>{log.user_name ?? 'نظام'}</span>
+                    <span>•</span>
+                    <span>
+                      {log.department_id
+                        ? departmentNameById.get(log.department_id) ?? 'قسم غير معروف'
+                        : 'عام / غير محدد'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="shrink-0 text-xs text-gray-400">
+                  {formatAuditDate(log.created_at)}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* اتجاه الأعطال الشهري */}
