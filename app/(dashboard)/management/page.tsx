@@ -990,6 +990,72 @@ export default async function ManagementPage() {
         />
       </div>
 
+      {/* مقارنة ديناميكية بين الأقسام */}
+      <div>
+        <div className="mb-4">
+          <h2 className="text-xl font-bold text-gray-900">
+            أداء الأقسام
+          </h2>
+          <p className="mt-1 text-sm text-gray-500">
+            يتم إنشاء هذه البطاقات تلقائيًا من جدول الأقسام والصلاحيات، بدون قائمة أقسام ثابتة
+          </p>
+        </div>
+
+        <div className="grid gap-5 xl:grid-cols-2">
+          {sortedDepartments.map((department) => (
+            <div
+              key={department.id}
+              className="rounded-2xl border bg-white p-6 shadow-sm"
+            >
+              <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">
+                    {department.name}
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-400">
+                    {department.code}
+                  </p>
+                </div>
+
+                <div className="text-left">
+                  <p className="text-sm text-gray-500">الجاهزية</p>
+                  <p
+                    className={`mt-1 text-3xl font-bold ${
+                      department.readiness === null
+                        ? 'text-gray-400'
+                        : department.readiness >= 90
+                          ? 'text-emerald-600'
+                          : department.readiness >= 75
+                            ? 'text-amber-600'
+                            : 'text-red-600'
+                    }`}
+                  >
+                    {department.readiness === null
+                      ? '—'
+                      : `${department.readiness}%`}
+                  </p>
+                </div>
+              </div>
+
+              <DepartmentMetricsPanel
+                totalAssets={department.totalAssets}
+                openFaults={department.openFaults}
+                pmCompletion={department.pmCompletion}
+                correctiveCompletion={department.correctiveCompletion}
+                mttrHours={department.mttrHours}
+                repeatedFaultAssets={department.repeatedFaultAssets}
+                overdueMaintenance={department.overdueMaintenance}
+                lowStockParts={department.lowStockParts}
+                openFaultItems={department.openFaultItems}
+                repeatedFaultItems={department.repeatedFaultItems}
+                overdueMaintenanceItems={department.overdueMaintenanceItems}
+                lowStockItems={department.lowStockItems}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* اتجاه الأعطال الشهري */}
       <div className="card">
         <div className="mb-3">
@@ -1153,72 +1219,6 @@ export default async function ManagementPage() {
             </table>
           </div>
         )}
-      </div>
-
-      {/* مقارنة ديناميكية بين الأقسام */}
-      <div>
-        <div className="mb-4">
-          <h2 className="text-xl font-bold text-gray-900">
-            أداء الأقسام
-          </h2>
-          <p className="mt-1 text-sm text-gray-500">
-            يتم إنشاء هذه البطاقات تلقائيًا من جدول الأقسام والصلاحيات، بدون قائمة أقسام ثابتة
-          </p>
-        </div>
-
-        <div className="grid gap-5 xl:grid-cols-2">
-          {sortedDepartments.map((department) => (
-            <div
-              key={department.id}
-              className="rounded-2xl border bg-white p-6 shadow-sm"
-            >
-              <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900">
-                    {department.name}
-                  </h3>
-                  <p className="mt-1 text-sm text-gray-400">
-                    {department.code}
-                  </p>
-                </div>
-
-                <div className="text-left">
-                  <p className="text-sm text-gray-500">الجاهزية</p>
-                  <p
-                    className={`mt-1 text-3xl font-bold ${
-                      department.readiness === null
-                        ? 'text-gray-400'
-                        : department.readiness >= 90
-                          ? 'text-emerald-600'
-                          : department.readiness >= 75
-                            ? 'text-amber-600'
-                            : 'text-red-600'
-                    }`}
-                  >
-                    {department.readiness === null
-                      ? '—'
-                      : `${department.readiness}%`}
-                  </p>
-                </div>
-              </div>
-
-              <DepartmentMetricsPanel
-                totalAssets={department.totalAssets}
-                openFaults={department.openFaults}
-                pmCompletion={department.pmCompletion}
-                correctiveCompletion={department.correctiveCompletion}
-                mttrHours={department.mttrHours}
-                repeatedFaultAssets={department.repeatedFaultAssets}
-                overdueMaintenance={department.overdueMaintenance}
-                lowStockParts={department.lowStockParts}
-                openFaultItems={department.openFaultItems}
-                repeatedFaultItems={department.repeatedFaultItems}
-                overdueMaintenanceItems={department.overdueMaintenanceItems}
-                lowStockItems={department.lowStockItems}
-              />
-            </div>
-          ))}
-        </div>
       </div>
 
       {/* التنبيهات الإدارية — تفتح داخل نفس الصفحة */}
