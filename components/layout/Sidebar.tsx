@@ -158,6 +158,12 @@ const managementNavItems = [
     icon: Package,
     roles: ['admin', 'engineer', 'technician', 'viewer'],
   },
+  {
+    href: '/audit-log',
+    label: 'سجل التحديثات',
+    icon: History,
+    roles: ['admin', 'engineer', 'technician', 'viewer'],
+  },
 ];
 
 const SIDEBAR_TITLES = {
