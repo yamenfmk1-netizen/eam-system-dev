@@ -1,10 +1,12 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { IS_MANAGEMENT_SITE } from '@/lib/site-config';
 
-// نفس منطق app/(dashboard)/users/layout.tsx — راجع التعليق هناك.
-// سجل التدقيق يحتوي كل عمليات الإضافة/التعديل/الحذف عبر النظام بالكامل،
-// وكان متاحًا لأي مستخدم مسجّل دخول قبل هذا الإصلاح.
-export default async function AuditLogLayout({ children }: { children: React.ReactNode }) {
+export default async function AuditLogLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const supabase = createClient();
 
   const {
@@ -18,10 +20,16 @@ export default async function AuditLogLayout({ children }: { children: React.Rea
   const { data: profile } = await supabase
     .from('profiles')
     .select('role')
-    .eq('id', user!.id)
+    .eq('id', user.id)
     .single();
 
-  if (profile?.role !== 'admin') {
+  // مواقع الأقسام العادية:
+  // سجل التحديثات يبقى Admin فقط كما كان سابقًا.
+  //
+  // موقع الإدارة:
+  // نسمح للمستخدم المسجل بالدخول للصفحة، بينما RLS في قاعدة البيانات
+  // يحدد السجلات التي يستطيع قراءتها حسب user_departments.
+  if (!IS_MANAGEMENT_SITE && profile?.role !== 'admin') {
     redirect('/dashboard');
   }
 
