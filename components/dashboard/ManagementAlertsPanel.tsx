@@ -62,7 +62,7 @@ export default function ManagementAlertsPanel({
         : 'جميع التنبيهات الإدارية';
 
   return (
-    <div>
+    <div id="management-alerts">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <AlertMetricCard
           label="إجمالي التنبيهات الإدارية"
