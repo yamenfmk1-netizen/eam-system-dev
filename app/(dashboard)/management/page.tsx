@@ -31,6 +31,9 @@ const OPEN_FAULT_STATUSES = [
   'waiting_for_spare_parts',
 ];
 
+const DEPARTMENT_INACTIVITY_DAYS = 4;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 const AUDIT_ACTION_LABELS: Record<string, string> = {
   add: 'إضافة',
   edit: 'تعديل',
@@ -252,6 +255,40 @@ export default async function ManagementPage() {
   const departmentList = (departments ?? []) as Department[];
   const departmentNameById = new Map(
     departmentList.map((department) => [department.id, department.name])
+  );
+
+
+  // آخر نشاط مسجل لكل قسم في سجل التحديثات.
+  // نستخدم استعلامًا صغيرًا لكل قسم حتى لا نتأثر بحدود عدد الصفوف
+  // في حال كان أحد الأقسام لديه عدد كبير جدًا من التحديثات.
+  const departmentLastActivityRows = await Promise.all(
+    departmentList.map(async (department) => {
+      const { data, error } = await supabase
+        .from('audit_logs')
+        .select('created_at')
+        .eq('department_id', department.id)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (error) {
+        console.error(
+          `Error loading last audit activity for ${department.code}:`,
+          error
+        );
+      }
+
+      return {
+        departmentId: department.id,
+        createdAt: data?.[0]?.created_at ?? null,
+      };
+    })
+  );
+
+  const departmentLastActivityById = new Map(
+    departmentLastActivityRows.map((item) => [
+      item.departmentId,
+      item.createdAt,
+    ])
   );
 
   const buildingById = new Map(
@@ -833,6 +870,51 @@ export default async function ManagementPage() {
   const managementAlerts: ManagementAlert[] = sortedDepartments
     .flatMap((department) => {
       const alerts: ManagementAlert[] = [];
+
+
+      const lastActivityAt =
+        departmentLastActivityById.get(department.id) ?? null;
+
+      if (!lastActivityAt) {
+        alerts.push({
+          departmentId: department.id,
+          departmentName: department.name,
+          title: 'القسم بدون تحديثات',
+          detail:
+            'لا يوجد أي تحديث مسجل لهذا القسم في سجل التحديثات.',
+          severity: 'high',
+          score: 390,
+        });
+      } else {
+        const inactivityMs =
+          now.getTime() - new Date(lastActivityAt).getTime();
+
+        const inactivityDays = Math.floor(
+          inactivityMs / DAY_MS
+        );
+
+        if (
+          inactivityMs >=
+          DEPARTMENT_INACTIVITY_DAYS * DAY_MS
+        ) {
+          const lastUpdateLabel = new Date(
+            lastActivityAt
+          ).toLocaleString('ar-SA', {
+            timeZone: 'Asia/Riyadh',
+            dateStyle: 'short',
+            timeStyle: 'short',
+          });
+
+          alerts.push({
+            departmentId: department.id,
+            departmentName: department.name,
+            title: 'لا توجد تحديثات منذ 4 أيام',
+            detail: `آخر تحديث مسجل للقسم كان ${lastUpdateLabel} — منذ ${inactivityDays} يوم.`,
+            severity: 'high',
+            score: 380 + inactivityDays,
+          });
+        }
+      }
 
       if (department.criticalFaults > 0) {
         alerts.push({
