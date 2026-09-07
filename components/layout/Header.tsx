@@ -122,7 +122,7 @@ export default function Header({
     loadDepartments();
   }, []);
 
-  // عدد الأعطال المفتوحة
+  // عدد التنبيهات الظاهر على أيقونة الجرس
   useEffect(() => {
     async function loadCount() {
       if (departmentIds.length === 0) {
@@ -130,7 +130,7 @@ export default function Header({
         return;
       }
 
-      const { count } = await supabase
+      const { count: openFaultCount } = await supabase
         .from('faults')
         .select('*', {
           count: 'exact',
@@ -139,10 +139,46 @@ export default function Header({
         .in('department_id', departmentIds)
         .in('status', OPEN_FAULT_STATUSES);
 
-      setNotifCount(count ?? 0);
+      // في موقع الإدارة فقط:
+      // نضيف عدد الأقسام التي لم تسجل أي تحديث خلال 4 أيام.
+      let inactiveDepartmentsCount = 0;
+
+      if (IS_MANAGEMENT_SITE) {
+        const fourDaysAgo =
+          Date.now() - 4 * 24 * 60 * 60 * 1000;
+
+        const lastActivityResults = await Promise.all(
+          departmentIds.map(async (departmentId) => {
+            const { data } = await supabase
+              .from('audit_logs')
+              .select('created_at')
+              .eq('department_id', departmentId)
+              .order('created_at', { ascending: false })
+              .limit(1);
+
+            return data?.[0]?.created_at ?? null;
+          })
+        );
+
+        inactiveDepartmentsCount =
+          lastActivityResults.filter((createdAt) => {
+            if (!createdAt) return true;
+
+            return (
+              new Date(createdAt).getTime() <=
+              fourDaysAgo
+            );
+          }).length;
+      }
+
+      setNotifCount(
+        (openFaultCount ?? 0) +
+          inactiveDepartmentsCount
+      );
     }
 
     loadCount();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [departmentIds]);
 
   // البحث
@@ -396,7 +432,7 @@ export default function Header({
         <Link
           href={
             IS_MANAGEMENT_SITE
-              ? '/management'
+              ? '/management#management-alerts'
               : '/notifications'
           }
           className="relative rounded-lg p-2 text-gray-500 hover:bg-gray-50"
