@@ -164,6 +164,12 @@ const managementNavItems = [
     icon: History,
     roles: ['admin', 'engineer', 'technician', 'viewer'],
   },
+  {
+    href: '/reports',
+    label: 'التقارير',
+    icon: BarChart3,
+    roles: ['admin', 'engineer', 'technician', 'viewer'],
+  },
 ];
 
 const SIDEBAR_TITLES = {
