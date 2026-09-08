@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import ManagementReportPanel from '@/components/reports/ManagementReportPanel';
 import { createClient } from '@/lib/supabase/client';
 import { FileDown, FileSpreadsheet, Loader2, Building2, Cpu, ClipboardCheck, Wrench, AlertTriangle, Package, Gauge, CalendarClock } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -295,6 +296,10 @@ export default function ReportsPage() {
         <p className="text-sm text-gray-500">استخراج تقارير PDF أو Excel لكل قسم من أقسام النظام</p>
       </div>
 
+      <ManagementReportPanel />
+
+      <h2 className="text-lg font-bold text-gray-900">تقارير السجلات العامة</h2>
+      <p className="text-sm text-gray-500">التقارير التالية مستقلة عن فلاتر التقرير الإداري أعلاه.</p>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {REPORTS.map((r) => {
           const Icon = r.icon;
