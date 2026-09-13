@@ -95,7 +95,18 @@ export function FaultPriorityChart({ data }: { data: { priority: string; count: 
       <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 20 }}>
         <CartesianGrid strokeDasharray="3 3" horizontal={false} />
         <XAxis type="number" allowDecimals={false} fontSize={11} />
-        <YAxis type="category" dataKey="name" width={70} fontSize={12} />
+       <YAxis
+  type="category"
+  dataKey="name"
+  width={100}
+  tickMargin={16}
+  tickLine={false}
+  tick={{
+    fontSize: 12,
+    direction: 'ltr',
+    textAnchor: 'end',
+  }}
+/>
         <Tooltip />
         <Bar dataKey="value" radius={[0, 6, 6, 0]}>
           {chartData.map((entry) => (
