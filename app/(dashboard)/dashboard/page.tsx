@@ -12,12 +12,13 @@ import {
   BatteryCharging,
   Building2,
   CalendarClock,
+  CheckCircle2,
+  Clock3,
   ClipboardCheck,
   Gauge,
   PackageX,
   RefreshCcw,
   ShieldAlert,
-  ShieldCheck,
   Wrench,
   Zap,
 } from 'lucide-react';
@@ -54,11 +55,28 @@ function daysFromToday(dateString: string, today: Date) {
 }
 
 function remainingLabel(days: number) {
-  if (days <= 0) return 'اليوم';
+  if (days < 0) return `متأخر ${Math.abs(days)} ${Math.abs(days) === 1 ? 'يوم' : 'أيام'}`;
+  if (days === 0) return 'اليوم';
   if (days === 1) return 'غدًا';
   if (days === 2) return 'بعد يومين';
   return `بعد ${days} أيام`;
 }
+
+function ageLabel(dateString: string, today: Date) {
+  const days = Math.max(0, -daysFromToday(dateString.slice(0, 10), today));
+  if (days === 0) return 'اليوم';
+  if (days === 1) return 'منذ يوم';
+  return `منذ ${days} أيام`;
+}
+
+const EQUIPMENT_TYPE_LABELS: Record<string, string> = {
+  generator: 'المولدات',
+  ups: 'أجهزة UPS',
+  ats: 'لوحات ATS',
+  transformer: 'المحولات',
+  switchgear: 'السويتش قير',
+  rmu: 'وحدات RMU',
+};
 
 export default async function DashboardPage() {
   if (IS_MANAGEMENT_SITE) {
@@ -98,6 +116,12 @@ export default async function DashboardPage() {
   const in30 = new Date(todayDate);
   in30.setDate(in30.getDate() + 30);
   const in30Str = dateOnly(in30);
+  const in7 = new Date(todayDate);
+  in7.setDate(in7.getDate() + 7);
+  const in7Str = dateOnly(in7);
+
+  const oneYearAgo = new Date(todayDate);
+  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
   const [
     { count: buildingsCount },
@@ -107,7 +131,6 @@ export default async function DashboardPage() {
     { data: statusCounts },
     { data: buildings },
     { data: spareParts },
-    { data: upcomingTests },
     { data: schedules },
     { data: maintenanceFallback },
     { data: pmRecords },
@@ -115,6 +138,10 @@ export default async function DashboardPage() {
     { data: repairedFaults },
     { data: repeatedFaultRecords },
     { data: monthlyFaultRecords },
+    { data: weeklyMaintenance },
+    { data: testFollowUpRecords },
+    { data: profiles },
+    { data: scheduledTests },
   ] = await Promise.all([
     supabase
       .from('buildings')
@@ -137,13 +164,13 @@ export default async function DashboardPage() {
 
     supabase
       .from('faults')
-      .select('id,building_id,priority,status')
+      .select('id,fault_number,building_id,equipment_id,priority,status,description,reported_at,responsible_engineer,responsible_technician,buildings(name,building_number),equipment(name,asset_id)')
       .eq('department_id', departmentId)
       .in('status', OPEN_FAULT_STATUSES),
 
     supabase
       .from('equipment')
-      .select('status')
+      .select('id,type,status')
       .eq('department_id', departmentId)
       .is('deleted_at', null),
 
@@ -158,25 +185,15 @@ export default async function DashboardPage() {
       .eq('department_id', departmentId),
 
     supabase
-      .from('tests')
-      .select('id,test_number,test_type,next_test_date,building_id,equipment_id,buildings(name,building_number),equipment(name,asset_id)')
-      .eq('department_id', departmentId)
-      .not('next_test_date', 'is', null)
-      .gte('next_test_date', today)
-      .lte('next_test_date', in30Str)
-      .order('next_test_date', { ascending: true })
-      .limit(8),
-
-    supabase
       .from('maintenance_schedules')
-      .select('id,building_id,next_due_date,is_active')
+      .select('id,title,building_id,equipment_id,next_due_date,is_active,engineer_name,technician_name,buildings(name,building_number),equipment(name,asset_id)')
       .eq('department_id', departmentId)
       .eq('is_active', true)
       .lt('next_due_date', today),
 
     supabase
       .from('maintenance_records')
-      .select('id,building_id,next_maintenance_date')
+      .select('id,maintenance_number,building_id,equipment_id,next_maintenance_date,engineer_name,technician_name,buildings(name,building_number),equipment(name,asset_id)')
       .eq('department_id', departmentId)
       .not('next_maintenance_date', 'is', null)
       .lt('next_maintenance_date', today),
@@ -224,6 +241,38 @@ export default async function DashboardPage() {
       .eq('department_id', departmentId)
       .gte('reported_at', `${sixMonthsStartStr}T00:00:00`)
       .lte('reported_at', todayDate.toISOString()),
+
+    // أعمال الصيانة المستحقة خلال الأسبوع القادم.
+    supabase
+      .from('maintenance_schedules')
+      .select('id,title,building_id,equipment_id,next_due_date,engineer_name,technician_name,buildings(name,building_number),equipment(name,asset_id)')
+      .eq('department_id', departmentId)
+      .eq('is_active', true)
+      .gte('next_due_date', today)
+      .lte('next_due_date', in7Str)
+      .order('next_due_date', { ascending: true }),
+
+    // آخر سنة تكفي لتحديد الملاحظات التي لم يتبعها اختبار ناجح أحدث.
+    supabase
+      .from('tests')
+      .select('id,test_number,test_type,test_date,result,notes,recommendations,responsible_person,building_id,equipment_id,buildings(name,building_number),equipment(name,asset_id)')
+      .eq('department_id', departmentId)
+      .eq('status', 'completed')
+      .gte('test_date', dateOnly(oneYearAgo))
+      .order('test_date', { ascending: false }),
+
+    supabase
+      .from('profiles')
+      .select('id,full_name')
+      .eq('is_active', true),
+
+    supabase
+      .from('tests')
+      .select('id,test_number,test_type,test_date,status,responsible_person,building_id,equipment_id,buildings(name,building_number),equipment(name,asset_id)')
+      .eq('department_id', departmentId)
+      .eq('status', 'scheduled')
+      .lte('test_date', in30Str)
+      .order('test_date', { ascending: true }),
   ]);
 
   const primaryTotal = primaryAssets?.length ?? 0;
@@ -379,11 +428,11 @@ const secondaryReadiness =
   }
 
   const nextTestByBuilding = new Map<string, { date: string; days: number }>();
-  for (const test of upcomingTests ?? []) {
-    if (!test.building_id || !test.next_test_date) continue;
-    const days = daysFromToday(test.next_test_date, todayDate);
+  for (const test of scheduledTests ?? []) {
+    if (!test.building_id || !test.test_date) continue;
+    const days = daysFromToday(test.test_date, todayDate);
     const current = nextTestByBuilding.get(test.building_id);
-    if (!current || days < current.days) nextTestByBuilding.set(test.building_id, { date: test.next_test_date, days });
+    if (!current || days < current.days) nextTestByBuilding.set(test.building_id, { date: test.test_date, days });
   }
 
   const prioritizedBuildings = (buildings ?? [])
@@ -416,243 +465,227 @@ const secondaryReadiness =
     .sort((a, b) => b.score - a.score || String(a.building_number).localeCompare(String(b.building_number), 'ar', { numeric: true }))
     .slice(0, 7);
 
+  const profileNameById = new Map(
+    (profiles ?? []).map((profile: any) => [profile.id, profile.full_name])
+  );
+
+  const pendingTestFollowUps: any[] = [];
+  const latestTestByTarget = new Set<string>();
+  for (const test of testFollowUpRecords ?? []) {
+    const target = test.equipment_id
+      ? `equipment:${test.equipment_id}:${test.test_type}`
+      : `building:${test.building_id}:${test.test_type}`;
+    if (latestTestByTarget.has(target)) continue;
+    latestTestByTarget.add(target);
+    if (test.result === 'failed' || test.result === 'passed_with_observation') {
+      pendingTestFollowUps.push(test);
+    }
+  }
+
+  const faultActions = (openFaults ?? []).map((fault: any) => ({
+    id: `fault-${fault.id}`,
+    kind: 'عطل',
+    title: `${fault.fault_number} — ${fault.description}`,
+    building: fault.buildings?.name ?? 'مبنى غير محدد',
+    equipment: fault.equipment?.name ?? 'بدون تحديد معدة',
+    responsible:
+      profileNameById.get(fault.responsible_engineer) ??
+      profileNameById.get(fault.responsible_technician) ??
+      'غير مسند',
+    timing: ageLabel(fault.reported_at, todayDate),
+    href: '/faults',
+    score:
+      (fault.priority === 'critical' ? 400 : fault.priority === 'high' ? 300 : 150) +
+      Math.max(0, -daysFromToday(fault.reported_at.slice(0, 10), todayDate)),
+    tone: fault.priority === 'critical' ? 'critical' : fault.priority === 'high' ? 'high' : 'medium',
+  }));
+
+  const overdueActions = overdueRows.map((row: any) => {
+    const dueDate = row.next_due_date ?? row.next_maintenance_date;
+    return {
+      id: `maintenance-${row.id}`,
+      kind: 'صيانة',
+      title: row.title ?? row.maintenance_number ?? 'صيانة مستحقة',
+      building: row.buildings?.name ?? 'مبنى غير محدد',
+      equipment: row.equipment?.name ?? 'بدون تحديد معدة',
+      responsible: row.engineer_name ?? row.technician_name ?? 'غير مسند',
+      timing: dueDate ? remainingLabel(daysFromToday(dueDate, todayDate)) : 'متأخرة',
+      href: '/maintenance',
+      score: 250 + (dueDate ? Math.max(0, -daysFromToday(dueDate, todayDate)) : 0),
+      tone: 'high',
+    };
+  });
+
+  const testActions = pendingTestFollowUps.map((test: any) => ({
+    id: `test-${test.id}`,
+    kind: 'اختبار',
+    title: `${test.test_number} — ${TEST_TYPE_LABELS[test.test_type] ?? test.test_type}`,
+    building: test.buildings?.name ?? 'مبنى غير محدد',
+    equipment: test.equipment?.name ?? 'بدون تحديد معدة',
+    responsible: test.responsible_person ?? 'غير مسند',
+    timing: ageLabel(test.test_date, todayDate),
+    href: '/tests',
+    score: test.result === 'failed' ? 350 : 220,
+    tone: test.result === 'failed' ? 'critical' : 'medium',
+  }));
+
+  const overdueTestActions = (scheduledTests ?? [])
+    .filter((test: any) => test.test_date < today)
+    .map((test: any) => ({
+      id: `scheduled-test-${test.id}`,
+      kind: 'اختبار متأخر',
+      title: `${test.test_number} — ${TEST_TYPE_LABELS[test.test_type] ?? test.test_type}`,
+      building: test.buildings?.name ?? 'مبنى غير محدد',
+      equipment: test.equipment?.name ?? 'بدون تحديد معدة',
+      responsible: test.responsible_person ?? 'غير مسند',
+      timing: remainingLabel(daysFromToday(test.test_date, todayDate)),
+      href: '/tests',
+      score: 300 + Math.max(0, -daysFromToday(test.test_date, todayDate)),
+      tone: 'high',
+    }));
+
+  const actionItems = [...faultActions, ...overdueActions, ...testActions, ...overdueTestActions]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 12);
+
+  const weeklyWork = [
+    ...(weeklyMaintenance ?? []).map((item: any) => ({
+      id: `maintenance-${item.id}`,
+      date: item.next_due_date,
+      type: 'صيانة',
+      title: item.title ?? 'صيانة دورية',
+      building: item.buildings?.name ?? 'مبنى غير محدد',
+      equipment: item.equipment?.name ?? 'بدون تحديد معدة',
+      responsible: item.engineer_name ?? item.technician_name ?? 'غير مسند',
+      href: '/maintenance',
+    })),
+    ...(scheduledTests ?? [])
+      .filter((item: any) => item.test_date >= today && item.test_date <= in7Str)
+      .map((item: any) => ({
+        id: `test-${item.id}`,
+        date: item.test_date,
+        type: 'اختبار',
+        title: TEST_TYPE_LABELS[item.test_type] ?? item.test_type,
+        building: item.buildings?.name ?? 'مبنى غير محدد',
+        equipment: item.equipment?.name ?? 'بدون تحديد معدة',
+        responsible: item.responsible_person ?? 'غير مسند',
+        href: '/tests',
+      })),
+  ].sort((a, b) => a.date.localeCompare(b.date));
+
+  const electricalSystemTypes = ['generator', 'ups', 'ats', 'transformer', 'switchgear', 'rmu'];
+  const systemSummary = electricalSystemTypes.map((type) => {
+    const assets = (statusCounts ?? []).filter((asset: any) => asset.type === type);
+    const ready = assets.filter((asset: any) =>
+      ['available', 'running', 'standby'].includes(asset.status)
+    ).length;
+    const attention = assets.length - ready;
+    return {
+      type,
+      label: EQUIPMENT_TYPE_LABELS[type],
+      total: assets.length,
+      ready,
+      attention,
+      readiness: assets.length > 0 ? Math.round((ready / assets.length) * 100) : null,
+    };
+  }).filter((system) => system.total > 0);
+
+  const criticalOpenFaults = (openFaults ?? []).filter(
+    (fault: any) => fault.priority === 'critical'
+  ).length;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" dir="rtl">
       <div>
-       <h1 className="text-xl font-bold text-gray-900">
-  {CURRENT_DASHBOARD_CONFIG.title}
-</h1>
-
-<p className="text-sm text-gray-500">
-  {CURRENT_DASHBOARD_CONFIG.subtitle}
-</p>
-      </div>
-
-      {/* الصف الأول: الحالة التشغيلية */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
-        <StatCard label="إجمالي المباني" value={buildingsCount ?? 0} icon={Building2} />
-        <StatCard
-  label={CURRENT_DASHBOARD_CONFIG.primaryLabel}
-  value={primaryTotal}
-  icon={Zap}
-  tone="warning"
-/>
-
-<StatCard
-  label={CURRENT_DASHBOARD_CONFIG.secondaryLabel}
-  value={secondaryTotal}
-  icon={BatteryCharging}
-  tone="success"
-/>
-        <StatCard label="الأعطال المفتوحة" value={openFaults?.length ?? 0} icon={AlertTriangle} tone="danger" />
-        <StatCard
-          label="معدات بأعطال متكررة (90 يوم)"
-          value={repeatedFaultAssetsCount}
-          icon={RefreshCcw}
-          tone={
-            repeatedFaultAssetsCount === 0
-              ? 'success'
-              : repeatedFaultAssetsCount <= 2
-                ? 'warning'
-                : 'danger'
-          }
-        />
-        <StatCard label="الصيانة المتأخرة" value={overdueMaintenanceCount} icon={Wrench} tone={overdueMaintenanceCount > 0 ? 'warning' : 'success'} />
-      </div>
-
-      {/* الصف الثاني: مؤشرات الأداء KPI */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
-        <StatCard
-  label={CURRENT_DASHBOARD_CONFIG.primaryReadinessLabel}
-  value={primaryReadiness}
-  suffix="%"
-  icon={Gauge}
-  tone={
-    primaryReadiness >= 90
-      ? 'success'
-      : primaryReadiness >= 75
-        ? 'warning'
-        : 'danger'
-  }
-/>
-
-<StatCard
-  label={CURRENT_DASHBOARD_CONFIG.secondaryReadinessLabel}
-  value={secondaryReadiness}
-  suffix="%"
-  icon={ShieldCheck}
-  tone={
-    secondaryReadiness >= 90
-      ? 'success'
-      : secondaryReadiness >= 75
-        ? 'warning'
-        : 'danger'
-  }
-/>
-
-        <StatCard
-          label="إنجاز الصيانة الوقائية"
-          value={pmCompletion ?? '—'}
-          suffix={pmCompletion === null ? undefined : '%'}
-          icon={ClipboardCheck}
-          tone={
-            pmCompletion === null
-              ? 'default'
-              : pmCompletion >= 90
-                ? 'success'
-                : pmCompletion >= 75
-                  ? 'warning'
-                  : 'danger'
-          }
-        />
-
-        <StatCard
-          label="إنجاز الصيانة العلاجية"
-          value={correctiveCompletion ?? '—'}
-          suffix={correctiveCompletion === null ? undefined : '%'}
-          icon={Wrench}
-          tone={
-            correctiveCompletion === null
-              ? 'default'
-              : correctiveCompletion >= 90
-                ? 'success'
-                : correctiveCompletion >= 75
-                  ? 'warning'
-                  : 'danger'
-          }
-        />
-
-        <StatCard
-          label="متوسط وقت الإصلاح (MTTR)"
-          value={mttrHours ?? '—'}
-          suffix={mttrHours === null ? undefined : ' ساعة'}
-          icon={Gauge}
-        />
-      </div>
-
-      {/* الصف الثالث: المخزون والضمان */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard
-          label="قطع غيار منخفضة المخزون"
-          value={lowStockCount}
-          icon={PackageX}
-          tone={lowStockCount > 0 ? 'warning' : 'success'}
-        />
-        <StatCard
-          label="ضمانات منتهية"
-          value={expiredWarrantyCount}
-          icon={ShieldAlert}
-          tone={expiredWarrantyCount > 0 ? 'danger' : 'success'}
-        />
-        <StatCard
-          label="ضمانات تنتهي خلال 30 يوم"
-          value={expiringWarrantyCount}
-          icon={CalendarClock}
-          tone={expiringWarrantyCount > 0 ? 'warning' : 'success'}
-        />
-      </div>
-
-      {/* الرسوم */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="card">
-          <h2 className="mb-2 font-bold text-gray-900">الأعطال المفتوحة حسب الأولوية</h2>
-          <FaultPriorityChart data={priorityData} />
-        </div>
-        <div className="card">
-          <h2 className="mb-2 font-bold text-gray-900">توزيع حالة المعدات</h2>
-          <EquipmentStatusChart data={statusData} />
+        <h1 className="text-xl font-bold text-gray-900">{CURRENT_DASHBOARD_CONFIG.title}</h1>
+        <p className="text-sm text-gray-500">متابعة الحالة التشغيلية والأعمال التي تحتاج إجراء</p>
+        <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-gray-500">
+          <span>المباني: <strong className="text-gray-800">{buildingsCount ?? 0}</strong></span>
+          <span>{CURRENT_DASHBOARD_CONFIG.primaryLabel}: <strong className="text-gray-800">{primaryTotal}</strong></span>
+          <span>{CURRENT_DASHBOARD_CONFIG.secondaryLabel}: <strong className="text-gray-800">{secondaryTotal}</strong></span>
         </div>
       </div>
 
-      <div className="card">
-        <div className="mb-3">
-          <h2 className="font-bold text-gray-900">اتجاه الأعطال الشهري</h2>
-          <p className="mt-0.5 text-xs text-gray-400">إجمالي الأعطال المسجلة خلال آخر 6 أشهر</p>
+      <section aria-label="ملخص الحالة">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <StatCard label="الأعطال الحرجة" value={criticalOpenFaults} icon={ShieldAlert} tone={criticalOpenFaults > 0 ? 'danger' : 'success'} />
+          <StatCard label="الأعطال المفتوحة" value={openFaults?.length ?? 0} icon={AlertTriangle} tone={(openFaults?.length ?? 0) > 0 ? 'danger' : 'success'} />
+          <StatCard label="الصيانة المتأخرة" value={overdueMaintenanceCount} icon={Wrench} tone={overdueMaintenanceCount > 0 ? 'warning' : 'success'} />
+          <StatCard label="ملاحظات اختبارات مفتوحة" value={pendingTestFollowUps.length} icon={ClipboardCheck} tone={pendingTestFollowUps.length > 0 ? 'warning' : 'success'} />
+          <StatCard label="إنجاز الوقائية — الشهر" value={pmCompletion ?? '—'} suffix={pmCompletion === null ? undefined : '%'} icon={Gauge} tone={pmCompletion === null ? 'default' : pmCompletion >= 90 ? 'success' : pmCompletion >= 75 ? 'warning' : 'danger'} />
         </div>
-        <MonthlyFaultTrendChart data={monthlyFaultTrendData} />
-      </div>
+        <p className="mt-2 text-xs text-gray-500">الأعطال والصيانة والملاحظات حسب الحالة الحالية، وإنجاز الوقائية من بداية الشهر حتى اليوم.</p>
+      </section>
 
-      {/* المباني حسب الأولوية + الاختبارات القادمة */}
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
-        <div className="card xl:col-span-3">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <h2 className="font-bold text-gray-900">المباني حسب الأولوية</h2>
-              <p className="mt-0.5 text-xs text-gray-400">الأعطال أولًا، ثم الصيانة المتأخرة، ثم الاختبارات القريبة</p>
-            </div>
-            <Link href="/buildings" className="text-sm font-medium text-primary-600 hover:underline">عرض جميع المباني</Link>
+      <section className="card" aria-labelledby="actions-title">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h2 id="actions-title" className="font-bold text-gray-900">يحتاج إجراء</h2>
+            <p className="mt-0.5 text-xs text-gray-500">الأعطال والصيانة المتأخرة وملاحظات الاختبارات مرتبة حسب الأولوية</p>
           </div>
-
+          <span className="rounded-full bg-red-50 px-3 py-1 text-sm font-bold text-red-700">{faultActions.length + overdueActions.length + testActions.length + overdueTestActions.length}</span>
+        </div>
+        {actionItems.length === 0 ? (
+          <div className="flex items-center justify-center gap-2 py-10 text-sm text-emerald-700"><CheckCircle2 className="h-5 w-5" />لا توجد أعمال عاجلة حاليًا</div>
+        ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[680px] text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 text-xs text-gray-400">
-                  <th className="px-2 py-2 text-start font-medium">المبنى</th>
-                  <th className="px-2 py-2 text-center font-medium">الحالة</th>
-                  <th className="px-2 py-2 text-center font-medium">الأعطال المفتوحة</th>
-                  <th className="px-2 py-2 text-center font-medium">الصيانة المتأخرة</th>
-                  <th className="px-2 py-2 text-center font-medium">الاختبار القادم</th>
+            <table className="w-full min-w-[900px] text-sm">
+              <thead><tr className="border-b text-xs text-gray-500"><th className="px-3 py-2 text-start">النوع</th><th className="px-3 py-2 text-start">الإجراء</th><th className="px-3 py-2 text-start">الموقع / المعدة</th><th className="px-3 py-2 text-start">المسؤول</th><th className="px-3 py-2 text-start">العمر / التأخير</th></tr></thead>
+              <tbody>{actionItems.map((item) => (
+                <tr key={item.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
+                  <td className="px-3 py-3"><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${item.tone === 'critical' ? 'bg-red-100 text-red-800' : item.tone === 'high' ? 'bg-amber-100 text-amber-800' : 'bg-blue-50 text-blue-700'}`}>{item.kind}</span></td>
+                  <td className="max-w-md px-3 py-3"><Link href={item.href} className="font-medium text-gray-900 hover:text-primary-600">{item.title}</Link></td>
+                  <td className="px-3 py-3 text-gray-600">{item.building}<span className="block text-xs text-gray-400">{item.equipment}</span></td>
+                  <td className={`px-3 py-3 ${item.responsible === 'غير مسند' ? 'font-medium text-red-600' : 'text-gray-700'}`}>{item.responsible}</td>
+                  <td className="px-3 py-3 font-medium text-gray-700">{item.timing}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {prioritizedBuildings.map((b) => (
-                  <tr key={b.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/70">
-                    <td className="px-2 py-3">
-                      <Link href={`/buildings/${b.id}`} className="flex items-center gap-2 font-medium text-gray-800 hover:text-primary-600">
-                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-gray-500"><Building2 className="h-4 w-4" /></span>
-                        <span>
-                          <span className="block">{b.name}</span>
-                          <span className="block text-xs font-normal text-gray-400">مبنى رقم {b.building_number}</span>
-                        </span>
-                      </Link>
-                    </td>
-                    <td className="px-2 py-3 text-center"><span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${b.badgeClass}`}>{b.badge}</span></td>
-                    <td className={`px-2 py-3 text-center font-semibold ${b.faults.total > 0 ? 'text-red-600' : 'text-gray-500'}`}>{b.faults.total}</td>
-                    <td className={`px-2 py-3 text-center font-semibold ${b.overdue > 0 ? 'text-amber-600' : 'text-gray-500'}`}>{b.overdue}</td>
-                    <td className="px-2 py-3 text-center text-gray-600">{b.nextTest ? remainingLabel(b.nextTest.days) : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
+              ))}</tbody>
             </table>
           </div>
-        </div>
+        )}
+        {faultActions.length + overdueActions.length + testActions.length + overdueTestActions.length > actionItems.length && <p className="mt-3 text-xs text-gray-400">يتم عرض أعلى 12 أولوية. افتح صفحة النوع لعرض البقية.</p>}
+      </section>
 
-        <div className="card xl:col-span-2">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <h2 className="font-bold text-gray-900">الاختبارات القادمة</h2>
-              <p className="mt-0.5 text-xs text-gray-400">خلال الـ 30 يوم القادمة</p>
-            </div>
-            <Link href="/tests" className="text-sm font-medium text-primary-600 hover:underline">عرض الكل</Link>
-          </div>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
+        <section className="card xl:col-span-3">
+          <div className="mb-4 flex items-center justify-between"><div><h2 className="font-bold text-gray-900">المباني حسب الأولوية</h2><p className="text-xs text-gray-500">الأعطال أولًا، ثم الصيانة المتأخرة والاختبارات القريبة</p></div><Link href="/buildings" className="text-sm font-medium text-primary-600 hover:underline">عرض الكل</Link></div>
+          <div className="overflow-x-auto"><table className="w-full min-w-[680px] text-sm">
+            <thead><tr className="border-b text-xs text-gray-500"><th className="px-2 py-2 text-start">المبنى</th><th className="px-2 py-2 text-center">الحالة</th><th className="px-2 py-2 text-center">الأعطال</th><th className="px-2 py-2 text-center">المتأخرة</th><th className="px-2 py-2 text-center">الاختبار القادم</th></tr></thead>
+            <tbody>{prioritizedBuildings.map((building) => <tr key={building.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50"><td className="px-2 py-3"><Link href={`/buildings/${building.id}`} className="font-medium text-gray-900 hover:text-primary-600">{building.name}<span className="block text-xs font-normal text-gray-400">مبنى رقم {building.building_number}</span></Link></td><td className="px-2 py-3 text-center"><span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${building.badgeClass}`}>{building.badge}</span></td><td className="px-2 py-3 text-center font-semibold">{building.faults.total}</td><td className="px-2 py-3 text-center font-semibold">{building.overdue}</td><td className="px-2 py-3 text-center">{building.nextTest ? remainingLabel(building.nextTest.days) : '—'}</td></tr>)}</tbody>
+          </table></div>
+        </section>
 
-          {(upcomingTests ?? []).length === 0 ? (
-            <div className="py-10 text-center">
-              <CalendarClock className="mx-auto mb-2 h-8 w-8 text-gray-300" />
-              <p className="text-sm text-gray-400">لا توجد اختبارات مجدولة خلال 30 يوم</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {(upcomingTests ?? []).slice(0, 6).map((test: any) => {
-                const days = daysFromToday(test.next_test_date, todayDate);
-                return (
-                  <Link key={test.id} href="/tests" className="flex items-center justify-between rounded-xl border border-gray-100 px-3 py-3 hover:bg-gray-50">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <Building2 className="h-4 w-4 shrink-0 text-gray-400" />
-                        <p className="truncate text-sm font-medium text-gray-800">{test.buildings?.name ?? 'مبنى غير محدد'}</p>
-                      </div>
-                      <p className="mt-1 truncate ps-6 text-xs text-gray-500">{TEST_TYPE_LABELS[test.test_type] ?? test.test_type}{test.equipment?.name ? ` — ${test.equipment.name}` : ''}</p>
-                    </div>
-                    <span className={`ms-3 shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${days <= 3 ? 'bg-red-50 text-red-700' : days <= 7 ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700'}`}>
-                      {remainingLabel(days)}
-                    </span>
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        <section className="card xl:col-span-2">
+          <div className="mb-4 flex items-center justify-between"><div><h2 className="font-bold text-gray-900">أعمال الأسبوع</h2><p className="text-xs text-gray-500">الصيانة والاختبارات خلال 7 أيام</p></div><CalendarClock className="h-5 w-5 text-gray-400" /></div>
+          {weeklyWork.length === 0 ? <p className="py-10 text-center text-sm text-gray-400">لا توجد أعمال مجدولة هذا الأسبوع</p> : <div className="space-y-2">{weeklyWork.map((item) => <Link key={item.id} href={item.href} className="block rounded-xl border border-gray-100 p-3 hover:bg-gray-50"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="truncate text-sm font-medium text-gray-900">{item.title}</p><p className="mt-1 truncate text-xs text-gray-500">{item.building} — {item.equipment}</p><p className="mt-1 text-xs text-gray-400">المسؤول: {item.responsible}</p></div><div className="shrink-0 text-left"><span className="block rounded-full bg-blue-50 px-2 py-1 text-xs text-blue-700">{item.type}</span><span className="mt-1 block text-xs text-gray-500">{remainingLabel(daysFromToday(item.date, todayDate))}</span></div></div></Link>)}</div>}
+        </section>
+      </div>
+
+      <section className="card">
+        <div className="mb-4"><h2 className="font-bold text-gray-900">حالة الأنظمة الكهربائية</h2><p className="text-xs text-gray-500">ملخص الجاهزية حسب نوع النظام</p></div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">{systemSummary.map((system) => <Link key={system.type} href={`/equipment?type=${system.type}`} className="rounded-xl border border-gray-100 p-4 transition hover:border-primary-200 hover:bg-primary-50/30"><div className="flex items-center justify-between"><h3 className="font-medium text-gray-900">{system.label}</h3><span className={`text-xl font-bold ${system.attention > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>{system.readiness === null ? '—' : `${system.readiness}%`}</span></div><div className="mt-3 flex gap-4 text-xs text-gray-500"><span>الإجمالي: {system.total}</span><span className="text-emerald-700">جاهز: {system.ready}</span><span className={system.attention > 0 ? 'font-medium text-amber-700' : ''}>يحتاج متابعة: {system.attention}</span></div></Link>)}</div>
+      </section>
+
+      <section className="card">
+        <div className="mb-4 flex items-center justify-between"><div><h2 className="font-bold text-gray-900">متابعة نتائج الاختبارات</h2><p className="text-xs text-gray-500">تبقى الملاحظة مفتوحة حتى تسجيل اختبار أحدث ناجح لنفس المعدة ونوع الاختبار</p></div><Link href="/tests" className="text-sm font-medium text-primary-600 hover:underline">سجل الاختبارات</Link></div>
+        {pendingTestFollowUps.length === 0 ? <p className="py-8 text-center text-sm text-emerald-700">لا توجد نتائج اختبار معلقة</p> : <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead><tr className="border-b text-xs text-gray-500"><th className="px-3 py-2 text-start">الاختبار</th><th className="px-3 py-2 text-start">المبنى / المعدة</th><th className="px-3 py-2 text-start">النتيجة</th><th className="px-3 py-2 text-start">الملاحظة / التوصية</th><th className="px-3 py-2 text-start">المسؤول</th></tr></thead><tbody>{pendingTestFollowUps.slice(0, 10).map((test: any) => <tr key={test.id} className="border-b border-gray-100 last:border-0"><td className="px-3 py-3 font-medium">{test.test_number}<span className="block text-xs font-normal text-gray-400">{test.test_date}</span></td><td className="px-3 py-3 text-gray-600">{test.buildings?.name ?? '—'}<span className="block text-xs text-gray-400">{test.equipment?.name ?? 'بدون تحديد معدة'}</span></td><td className={`px-3 py-3 font-medium ${test.result === 'failed' ? 'text-red-700' : 'text-amber-700'}`}>{test.result === 'failed' ? 'فاشل' : 'ناجح مع ملاحظة'}</td><td className="max-w-md px-3 py-3 text-gray-600">{test.recommendations ?? test.notes ?? 'لم تُسجل توصية'}</td><td className="px-3 py-3">{test.responsible_person ?? 'غير مسند'}</td></tr>)}</tbody></table></div>}
+      </section>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <StatCard label={CURRENT_DASHBOARD_CONFIG.primaryReadinessLabel} value={primaryReadiness} suffix="%" icon={Zap} tone={primaryReadiness >= 90 ? 'success' : primaryReadiness >= 75 ? 'warning' : 'danger'} />
+        <StatCard label={CURRENT_DASHBOARD_CONFIG.secondaryReadinessLabel} value={secondaryReadiness} suffix="%" icon={BatteryCharging} tone={secondaryReadiness >= 90 ? 'success' : secondaryReadiness >= 75 ? 'warning' : 'danger'} />
+        <StatCard label="إنجاز العلاجية — الشهر" value={correctiveCompletion ?? '—'} suffix={correctiveCompletion === null ? undefined : '%'} icon={Wrench} tone={correctiveCompletion === null ? 'default' : correctiveCompletion >= 90 ? 'success' : correctiveCompletion >= 75 ? 'warning' : 'danger'} />
+        <StatCard label="متوسط الإصلاح — الشهر" value={mttrHours ?? '—'} suffix={mttrHours === null ? undefined : ' ساعة'} icon={Clock3} />
+        <StatCard label="معدات متكررة الأعطال (90 يوم)" value={repeatedFaultAssetsCount} icon={RefreshCcw} tone={repeatedFaultAssetsCount === 0 ? 'success' : repeatedFaultAssetsCount <= 2 ? 'warning' : 'danger'} />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2"><div className="card"><h2 className="mb-2 font-bold text-gray-900">الأعطال المفتوحة حسب الأولوية</h2><FaultPriorityChart data={priorityData} /></div><div className="card"><h2 className="mb-2 font-bold text-gray-900">توزيع حالة المعدات</h2><EquipmentStatusChart data={statusData} /></div></div>
+      <div className="card"><div className="mb-3"><h2 className="font-bold text-gray-900">اتجاه الأعطال الشهري</h2><p className="text-xs text-gray-500">إجمالي الأعطال المسجلة خلال آخر 6 أشهر</p></div><MonthlyFaultTrendChart data={monthlyFaultTrendData} /></div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatCard label="قطع غيار منخفضة المخزون" value={lowStockCount} icon={PackageX} tone={lowStockCount > 0 ? 'warning' : 'success'} />
+        <StatCard label="ضمانات منتهية" value={expiredWarrantyCount} icon={ShieldAlert} tone={expiredWarrantyCount > 0 ? 'danger' : 'success'} />
+        <StatCard label="ضمانات تنتهي خلال 30 يوم" value={expiringWarrantyCount} icon={CalendarClock} tone={expiringWarrantyCount > 0 ? 'warning' : 'success'} />
       </div>
     </div>
   );
