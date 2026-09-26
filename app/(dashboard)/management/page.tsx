@@ -4,11 +4,9 @@ import Link from 'next/link';
 import StatCard from '@/components/ui/StatCard';
 import DepartmentMetricsPanel from '@/components/dashboard/DepartmentMetricsPanel';
 import ManagementAlertsPanel from '@/components/dashboard/ManagementAlertsPanel';
-import { DepartmentPerformanceChart, MonthlyFaultTrendChart } from '@/components/dashboard/DashboardCharts';
+import { MonthlyFaultTrendChart } from '@/components/dashboard/DashboardCharts';
 import {
   AlertTriangle,
-  Boxes,
-  Building2,
   CalendarClock,
   ClipboardCheck,
   Gauge,
@@ -851,13 +849,6 @@ export default async function ManagementPage() {
     return scoreB - scoreA || a.name.localeCompare(b.name, 'ar');
   });
 
-  const departmentComparisonData = sortedDepartments.map((department) => ({
-    department: department.name,
-    readiness: department.readiness,
-    pmCompletion: department.pmCompletion,
-    correctiveCompletion: department.correctiveCompletion,
-  }));
-
   type ManagementAlert = {
     departmentId: string;
     departmentName: string;
@@ -1020,341 +1011,67 @@ export default async function ManagementPage() {
           لوحة الإدارة
         </h1>
         <p className="mt-2 text-gray-500">
-          نظرة شاملة وديناميكية على جميع الأقسام المصرح لهذا الحساب برؤيتها
+          متابعة الحالة التشغيلية والأولويات عبر الأقسام المصرح لك بمتابعتها
         </p>
-      </div>
-
-      {/* الصف الأول: الحالة التشغيلية العامة */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
-        <StatCard
-          label="الأقسام"
-          value={departmentStats.length}
-          icon={Building2}
-        />
-        <StatCard
-          label="إجمالي الأصول"
-          value={totalAssets}
-          icon={Boxes}
-        />
-        <StatCard
-          label="الأعطال المفتوحة"
-          value={totalOpenFaults}
-          icon={AlertTriangle}
-          tone={totalOpenFaults > 0 ? 'danger' : 'success'}
-        />
-        <StatCard
-          label="الأعطال الحرجة"
-          value={totalCriticalFaults}
-          icon={ShieldAlert}
-          tone={totalCriticalFaults > 0 ? 'danger' : 'success'}
-        />
-        <StatCard
-          label="معدات بأعطال متكررة (90 يوم)"
-          value={totalRepeatedFaultAssets}
-          icon={RefreshCcw}
-          tone={
-            totalRepeatedFaultAssets === 0
-              ? 'success'
-              : totalRepeatedFaultAssets <= 2
-                ? 'warning'
-                : 'danger'
-          }
-        />
-        <StatCard
-          label="الصيانة المتأخرة"
-          value={totalOverdueMaintenance}
-          icon={Wrench}
-          tone={
-            totalOverdueMaintenance > 0 ? 'warning' : 'success'
-          }
-        />
-      </div>
-
-      {/* الصف الثاني: مؤشرات الأداء */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
-        <StatCard
-          label="الجاهزية العامة"
-          value={overallReadiness ?? '—'}
-          suffix={overallReadiness === null ? undefined : '%'}
-          icon={Gauge}
-          tone={kpiTone(overallReadiness)}
-        />
-        <StatCard
-          label="إنجاز الصيانة الوقائية"
-          value={overallPmCompletion ?? '—'}
-          suffix={overallPmCompletion === null ? undefined : '%'}
-          icon={ClipboardCheck}
-          tone={kpiTone(overallPmCompletion)}
-        />
-        <StatCard
-          label="إنجاز الصيانة العلاجية"
-          value={overallCorrectiveCompletion ?? '—'}
-          suffix={
-            overallCorrectiveCompletion === null ? undefined : '%'
-          }
-          icon={Wrench}
-          tone={kpiTone(overallCorrectiveCompletion)}
-        />
-        <StatCard
-          label="متوسط وقت الإصلاح (MTTR)"
-          value={overallMttrHours ?? '—'}
-          suffix={overallMttrHours === null ? undefined : ' ساعة'}
-          icon={Gauge}
-        />
-      </div>
-
-      {/* الصف الثالث: المخزون والضمان */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard
-          label="قطع غيار منخفضة المخزون"
-          value={totalLowStockParts}
-          icon={PackageX}
-          tone={totalLowStockParts > 0 ? 'warning' : 'success'}
-        />
-        <StatCard
-          label="ضمانات منتهية"
-          value={totalExpiredWarranties}
-          icon={ShieldAlert}
-          tone={
-            totalExpiredWarranties > 0 ? 'danger' : 'success'
-          }
-        />
-        <StatCard
-          label="ضمانات تنتهي خلال 30 يوم"
-          value={totalExpiringWarranties}
-          icon={CalendarClock}
-          tone={
-            totalExpiringWarranties > 0 ? 'warning' : 'success'
-          }
-        />
-      </div>
-
-      {/* مقارنة ديناميكية بين الأقسام */}
-      <div>
-        <div className="mb-4">
-          <h2 className="text-xl font-bold text-gray-900">
-            أداء الأقسام
-          </h2>
-          <p className="mt-1 text-sm text-gray-500">
-            يتم إنشاء هذه البطاقات تلقائيًا من جدول الأقسام والصلاحيات، بدون قائمة أقسام ثابتة
-          </p>
-        </div>
-
-        <div className="grid gap-5 xl:grid-cols-2">
-          {sortedDepartments.map((department) => (
-            <div
-              key={department.id}
-              className="rounded-2xl border bg-white p-6 shadow-sm"
-            >
-              <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900">
-                    {department.name}
-                  </h3>
-                  <p className="mt-1 text-sm text-gray-400">
-                    {department.code}
-                  </p>
-                </div>
-
-                <div className="text-left">
-                  <p className="text-sm text-gray-500">الجاهزية</p>
-                  <p
-                    className={`mt-1 text-3xl font-bold ${
-                      department.readiness === null
-                        ? 'text-gray-400'
-                        : department.readiness >= 90
-                          ? 'text-emerald-600'
-                          : department.readiness >= 75
-                            ? 'text-amber-600'
-                            : 'text-red-600'
-                    }`}
-                  >
-                    {department.readiness === null
-                      ? '—'
-                      : `${department.readiness}%`}
-                  </p>
-                </div>
-              </div>
-
-              <DepartmentMetricsPanel
-                totalAssets={department.totalAssets}
-                openFaults={department.openFaults}
-                pmCompletion={department.pmCompletion}
-                correctiveCompletion={department.correctiveCompletion}
-                mttrHours={department.mttrHours}
-                repeatedFaultAssets={department.repeatedFaultAssets}
-                overdueMaintenance={department.overdueMaintenance}
-                lowStockParts={department.lowStockParts}
-                openFaultItems={department.openFaultItems}
-                repeatedFaultItems={department.repeatedFaultItems}
-                overdueMaintenanceItems={department.overdueMaintenanceItems}
-                lowStockItems={department.lowStockItems}
-              />
-            </div>
-          ))}
+        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-gray-500">
+          <span>الأقسام: <strong className="text-gray-900">{departmentStats.length}</strong></span>
+          <span>إجمالي الأصول: <strong className="text-gray-900">{totalAssets}</strong></span>
+          <span>وقت عرض البيانات: {formatAuditDate(now.toISOString())}</span>
         </div>
       </div>
 
-      {/* آخر التحديثات */}
-      <div className="card">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <History className="h-5 w-5 text-gray-600" />
-            <div>
-              <h2 className="font-bold text-gray-900">آخر التحديثات</h2>
-              <p className="mt-0.5 text-xs text-gray-400">
-                آخر 10 أحداث من الأقسام المسموح لهذا الحساب برؤيتها
-              </p>
-            </div>
-          </div>
-
-          <Link
-            href="/audit-log"
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-primary-600 hover:underline"
-          >
-            عرض السجل كامل
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
+      {/* المؤشرات التنفيذية */}
+      <section aria-label="ملخص الحالة التشغيلية">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <StatCard
+            label="الأعطال الحرجة"
+            value={totalCriticalFaults}
+            icon={ShieldAlert}
+            tone={totalCriticalFaults > 0 ? 'danger' : 'success'}
+          />
+          <StatCard
+            label="الأعطال المفتوحة"
+            value={totalOpenFaults}
+            icon={AlertTriangle}
+            tone={totalOpenFaults > 0 ? 'danger' : 'success'}
+          />
+          <StatCard
+            label="الصيانة المتأخرة"
+            value={totalOverdueMaintenance}
+            icon={Wrench}
+            tone={
+              totalOverdueMaintenance > 0 ? 'warning' : 'success'
+            }
+          />
+          <StatCard
+            label="الجاهزية العامة"
+            value={overallReadiness ?? '—'}
+            suffix={overallReadiness === null ? undefined : '%'}
+            icon={Gauge}
+            tone={kpiTone(overallReadiness)}
+          />
+          <StatCard
+            label="إنجاز الوقائية — الشهر الحالي"
+            value={overallPmCompletion ?? '—'}
+            suffix={overallPmCompletion === null ? undefined : '%'}
+            icon={ClipboardCheck}
+            tone={kpiTone(overallPmCompletion)}
+          />
         </div>
-
-        {(recentAuditLogs ?? []).length === 0 ? (
-          <p className="py-8 text-center text-sm text-gray-400">
-            لا توجد تحديثات مرتبطة بالأقسام حاليًا
-          </p>
-        ) : (
-          <div className="divide-y divide-gray-100">
-            {(recentAuditLogs ?? []).map((log: any) => (
-              <div
-                key={log.id}
-                className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium text-gray-900">
-                      {AUDIT_ACTION_LABELS[log.action] ?? log.action}
-                    </span>
-                    <span className="text-gray-300">•</span>
-                    <span className="text-sm text-gray-600">
-                      {AUDIT_TABLE_LABELS[log.table_name] ?? log.table_name}
-                    </span>
-                    {auditRecordLabel(log) !== '—' && (
-                      <>
-                        <span className="text-gray-300">•</span>
-                        <span className="text-sm font-medium text-gray-700" dir="ltr">
-                          {auditRecordLabel(log)}
-                        </span>
-                      </>
-                    )}
-                  </div>
-
-                  <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-gray-400">
-                    <span>{log.user_name ?? 'نظام'}</span>
-                    <span>•</span>
-                    <span>
-                      {log.department_id
-                        ? departmentNameById.get(log.department_id) ?? 'قسم غير معروف'
-                        : 'عام / غير محدد'}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="shrink-0 text-xs text-gray-400">
-                  {formatAuditDate(log.created_at)}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* اتجاه الأعطال الشهري */}
-      <div className="card">
-        <div className="mb-3">
-          <h2 className="font-bold text-gray-900">
-            اتجاه الأعطال الشهري
-          </h2>
-          <p className="mt-0.5 text-xs text-gray-400">
-            جميع الأعطال المسجلة في الأقسام المسموحة خلال آخر 6 أشهر
-          </p>
-        </div>
-        <MonthlyFaultTrendChart data={monthlyFaultTrendData} />
-      </div>
-
-      {/* مقارنة مؤشرات أداء الأقسام */}
-      <div className="card">
-        <div className="mb-3">
-          <h2 className="font-bold text-gray-900">
-            مقارنة أداء الأقسام
-          </h2>
-          <p className="mt-0.5 text-xs text-gray-400">
-            مقارنة الجاهزية وإنجاز الصيانة الوقائية والعلاجية لكل قسم
-          </p>
-        </div>
-        <DepartmentPerformanceChart data={departmentComparisonData} />
-      </div>
-
-      {/* المعدات الأكثر تكرارًا بالأعطال */}
-      <div className="card">
-        <div className="mb-4">
-          <h2 className="font-bold text-gray-900">
-            المعدات الأكثر تكرارًا بالأعطال
-          </h2>
-          <p className="mt-0.5 text-xs text-gray-400">
-            المعدات التي سُجل عليها عطلان أو أكثر خلال آخر 90 يوم
-          </p>
-        </div>
-
-        {topRepeatedEquipment.length === 0 ? (
-          <p className="py-8 text-center text-sm text-gray-400">
-            لا توجد معدات بأعطال متكررة خلال آخر 90 يوم
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 text-xs text-gray-400">
-                  <th className="px-3 py-2 text-start font-medium">المعدة</th>
-                  <th className="px-3 py-2 text-start font-medium">رقم الأصل</th>
-                  <th className="px-3 py-2 text-start font-medium">القسم</th>
-                  <th className="px-3 py-2 text-start font-medium">المبنى</th>
-                  <th className="px-3 py-2 text-center font-medium">عدد الأعطال</th>
-                </tr>
-              </thead>
-              <tbody>
-                {topRepeatedEquipment.map((item) => (
-                  <tr
-                    key={item.id}
-                    className="border-b border-gray-50 last:border-0 hover:bg-gray-50/70"
-                  >
-                    <td className="px-3 py-3 font-medium text-gray-900">
-                      {item.name}
-                    </td>
-                    <td className="px-3 py-3 text-gray-600" dir="ltr">
-                      {item.assetId ?? '—'}
-                    </td>
-                    <td className="px-3 py-3 text-gray-600">
-                      {item.departmentName}
-                    </td>
-                    <td className="px-3 py-3 text-gray-600">
-                      {item.buildingLabel}
-                    </td>
-                    <td
-                      className={`px-3 py-3 text-center text-lg font-bold ${
-                        item.faultCount >= 4
-                          ? 'text-red-600'
-                          : 'text-amber-600'
-                      }`}
-                    >
-                      {item.faultCount}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
+        <p className="mt-3 text-xs leading-6 text-gray-500">
+          الأعطال والجاهزية والتأخير: الحالة الحالية. إنجاز الصيانة: السجلات غير الملغاة من بداية الشهر حتى اليوم. — تعني عدم وجود بيانات لحساب المؤشر.
+        </p>
+      </section>
+      <section aria-labelledby="management-priorities">
+        <h2 id="management-priorities" className="mb-3 text-xl font-bold text-gray-900">التنبيهات الإدارية والمتابعة</h2>
+        {/* التنبيهات الإدارية — تفتح داخل نفس الصفحة */}
+        <ManagementAlertsPanel
+          alerts={managementAlerts}
+          totalCount={managementAlerts.length}
+          criticalCount={criticalManagementAlerts}
+          highCount={highManagementAlerts}
+        />
+      </section>
       {/* المباني الأعلى أولوية */}
       <div className="card">
         <div className="mb-4">
@@ -1432,13 +1149,262 @@ export default async function ManagementPage() {
         )}
       </div>
 
-      {/* التنبيهات الإدارية — تفتح داخل نفس الصفحة */}
-      <ManagementAlertsPanel
-        alerts={managementAlerts}
-        totalCount={managementAlerts.length}
-        criticalCount={criticalManagementAlerts}
-        highCount={highManagementAlerts}
-      />
+      {/* مقارنة أداء الأقسام */}
+      <section className="card" aria-labelledby="department-performance">
+        <h2 id="department-performance" className="font-bold text-gray-900">مقارنة أداء الأقسام</h2>
+        <p className="mt-1 mb-4 text-xs leading-6 text-gray-500">الأقسام مرتبة حسب الأولوية التشغيلية. إنجاز الوقائية والعلاجية ومتوسط الإصلاح للشهر الحالي؛ الجاهزية والأعطال والتأخير حسب الحالة الحالية.</p>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[850px] text-sm">
+            <thead>
+              <tr className="border-b text-gray-500">
+                {['القسم', 'الجاهزية', 'أعطال حرجة', 'أعطال مفتوحة', 'صيانة متأخرة', 'إنجاز الوقائية', 'إنجاز العلاجية', 'متوسط الإصلاح (ساعة)'].map(label => (
+                  <th key={label} scope="col" className="px-3 py-3 text-start font-medium">{label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {sortedDepartments.map(department => (
+                <tr key={department.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
+                  <th scope="row" className="px-3 py-3 text-start font-semibold">{department.name}</th>
+                  <td className="px-3 py-3">{department.readiness === null ? '—' : `${department.readiness}%`}</td>
+                  <td className={`px-3 py-3 font-bold ${department.criticalFaults > 0 ? 'text-red-600' : 'text-gray-500'}`}>{department.criticalFaults}</td>
+                  <td className="px-3 py-3">{department.openFaults}</td>
+                  <td className={`px-3 py-3 ${department.overdueMaintenance > 0 ? 'text-amber-700 font-bold' : 'text-gray-500'}`}>{department.overdueMaintenance}</td>
+                  <td className="px-3 py-3">{department.pmCompletion === null ? '—' : `${department.pmCompletion}%`}</td>
+                  <td className="px-3 py-3">{department.correctiveCompletion === null ? '—' : `${department.correctiveCompletion}%`}</td>
+                  <td className="px-3 py-3">{department.mttrHours ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-4 space-y-2">
+          {sortedDepartments.map(department => (
+            <details key={department.id} className="rounded-xl border border-gray-100 p-4">
+              <summary className="cursor-pointer font-medium text-primary-600 focus-visible:outline focus-visible:outline-2">تفاصيل {department.name}</summary>
+              <div className="mt-4">
+              <DepartmentMetricsPanel
+                totalAssets={department.totalAssets}
+                openFaults={department.openFaults}
+                pmCompletion={department.pmCompletion}
+                correctiveCompletion={department.correctiveCompletion}
+                mttrHours={department.mttrHours}
+                repeatedFaultAssets={department.repeatedFaultAssets}
+                overdueMaintenance={department.overdueMaintenance}
+                lowStockParts={department.lowStockParts}
+                openFaultItems={department.openFaultItems}
+                repeatedFaultItems={department.repeatedFaultItems}
+                overdueMaintenanceItems={department.overdueMaintenanceItems}
+                lowStockItems={department.lowStockItems}
+              />
+              </div>
+            </details>
+          ))}
+        </div>
+      </section>
+      {/* مؤشرات الإصلاح والتكرار */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatCard
+          label="معدات بأعطال متكررة (90 يوم)"
+          value={totalRepeatedFaultAssets}
+          icon={RefreshCcw}
+          tone={
+            totalRepeatedFaultAssets === 0
+              ? 'success'
+              : totalRepeatedFaultAssets <= 2
+                ? 'warning'
+                : 'danger'
+          }
+        />
+        <StatCard
+          label="إنجاز العلاجية — الشهر الحالي"
+          value={overallCorrectiveCompletion ?? '—'}
+          suffix={
+            overallCorrectiveCompletion === null ? undefined : '%'
+          }
+          icon={Wrench}
+          tone={kpiTone(overallCorrectiveCompletion)}
+        />
+        <StatCard
+          label="متوسط الإصلاح — الشهر الحالي"
+          value={overallMttrHours ?? '—'}
+          suffix={overallMttrHours === null ? undefined : ' ساعة'}
+          icon={Gauge}
+        />
+      </div>
+      {/* اتجاه الأعطال الشهري */}
+      <div className="card">
+        <div className="mb-3">
+          <h2 className="font-bold text-gray-900">
+            اتجاه الأعطال الشهري
+          </h2>
+          <p className="mt-0.5 text-xs text-gray-400">
+            جميع الأعطال المسجلة في الأقسام المسموحة خلال آخر 6 أشهر
+          </p>
+        </div>
+        <MonthlyFaultTrendChart data={monthlyFaultTrendData} />
+      </div>
+
+      {/* المعدات الأكثر تكرارًا بالأعطال */}
+      <div className="card">
+        <div className="mb-4">
+          <h2 className="font-bold text-gray-900">
+            المعدات الأكثر تكرارًا بالأعطال
+          </h2>
+          <p className="mt-0.5 text-xs text-gray-400">
+            المعدات التي سُجل عليها عطلان أو أكثر خلال آخر 90 يوم
+          </p>
+        </div>
+
+        {topRepeatedEquipment.length === 0 ? (
+          <p className="py-8 text-center text-sm text-gray-400">
+            لا توجد معدات بأعطال متكررة خلال آخر 90 يوم
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 text-xs text-gray-400">
+                  <th className="px-3 py-2 text-start font-medium">المعدة</th>
+                  <th className="px-3 py-2 text-start font-medium">رقم الأصل</th>
+                  <th className="px-3 py-2 text-start font-medium">القسم</th>
+                  <th className="px-3 py-2 text-start font-medium">المبنى</th>
+                  <th className="px-3 py-2 text-center font-medium">عدد الأعطال</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topRepeatedEquipment.map((item) => (
+                  <tr
+                    key={item.id}
+                    className="border-b border-gray-50 last:border-0 hover:bg-gray-50/70"
+                  >
+                    <td className="px-3 py-3 font-medium text-gray-900">
+                      {item.name}
+                    </td>
+                    <td className="px-3 py-3 text-gray-600" dir="ltr">
+                      {item.assetId ?? '—'}
+                    </td>
+                    <td className="px-3 py-3 text-gray-600">
+                      {item.departmentName}
+                    </td>
+                    <td className="px-3 py-3 text-gray-600">
+                      {item.buildingLabel}
+                    </td>
+                    <td
+                      className={`px-3 py-3 text-center text-lg font-bold ${
+                        item.faultCount >= 4
+                          ? 'text-red-600'
+                          : 'text-amber-600'
+                      }`}
+                    >
+                      {item.faultCount}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* المخزون والضمان */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatCard
+          label="قطع غيار منخفضة المخزون"
+          value={totalLowStockParts}
+          icon={PackageX}
+          tone={totalLowStockParts > 0 ? 'warning' : 'success'}
+        />
+        <StatCard
+          label="ضمانات منتهية"
+          value={totalExpiredWarranties}
+          icon={ShieldAlert}
+          tone={
+            totalExpiredWarranties > 0 ? 'danger' : 'success'
+          }
+        />
+        <StatCard
+          label="ضمانات تنتهي خلال 30 يوم"
+          value={totalExpiringWarranties}
+          icon={CalendarClock}
+          tone={
+            totalExpiringWarranties > 0 ? 'warning' : 'success'
+          }
+        />
+      </div>
+
+      {/* آخر التحديثات */}
+      <div className="card">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <History className="h-5 w-5 text-gray-600" />
+            <div>
+              <h2 className="font-bold text-gray-900">آخر التحديثات</h2>
+              <p className="mt-0.5 text-xs text-gray-400">
+                آخر 10 أحداث من الأقسام المسموح لهذا الحساب برؤيتها
+              </p>
+            </div>
+          </div>
+
+          <Link
+            href="/audit-log"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-primary-600 hover:underline"
+          >
+            عرض السجل كامل
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
+        </div>
+
+        {(recentAuditLogs ?? []).length === 0 ? (
+          <p className="py-8 text-center text-sm text-gray-400">
+            لا توجد تحديثات مرتبطة بالأقسام حاليًا
+          </p>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {(recentAuditLogs ?? []).map((log: any) => (
+              <div
+                key={log.id}
+                className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium text-gray-900">
+                      {AUDIT_ACTION_LABELS[log.action] ?? log.action}
+                    </span>
+                    <span className="text-gray-300">•</span>
+                    <span className="text-sm text-gray-600">
+                      {AUDIT_TABLE_LABELS[log.table_name] ?? log.table_name}
+                    </span>
+                    {auditRecordLabel(log) !== '—' && (
+                      <>
+                        <span className="text-gray-300">•</span>
+                        <span className="text-sm font-medium text-gray-700" dir="ltr">
+                          {auditRecordLabel(log)}
+                        </span>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-gray-400">
+                    <span>{log.user_name ?? 'نظام'}</span>
+                    <span>•</span>
+                    <span>
+                      {log.department_id
+                        ? departmentNameById.get(log.department_id) ?? 'قسم غير معروف'
+                        : 'عام / غير محدد'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="shrink-0 text-xs text-gray-400">
+                  {formatAuditDate(log.created_at)}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
     </div>
   );
 }
