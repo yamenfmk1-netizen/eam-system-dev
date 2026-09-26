@@ -265,6 +265,27 @@ export default function TestsPage() {
         new Date(a.test_date).getTime()
     );
 
+  // أحدث اختبار لكل معدة/نوع هو الذي يحدد إن كانت الملاحظة لا تزال مفتوحة.
+  const openFollowUpTestIds = new Set<string>();
+  const latestTargetKeys = new Set<string>();
+  [...baseFiltered]
+    .filter((t) => (t.status ?? 'completed') === 'completed')
+    .sort(
+      (a, b) =>
+        new Date(b.test_date).getTime() -
+        new Date(a.test_date).getTime()
+    )
+    .forEach((t) => {
+      const key = t.equipment_id
+        ? `equipment:${t.equipment_id}:${t.test_type}`
+        : `building:${t.building_id}:${t.test_type}`;
+      if (latestTargetKeys.has(key)) return;
+      latestTargetKeys.add(key);
+      if (t.result === 'failed' || t.result === 'passed_with_observation') {
+        openFollowUpTestIds.add(t.id);
+      }
+    });
+
   const resultTone = (r: string) =>
     r === 'passed'
       ? 'ready'
@@ -695,6 +716,7 @@ export default function TestsPage() {
                   <th className="px-4 py-3">التاريخ</th>
                   <th className="px-4 py-3">الحالة</th>
                   <th className="px-4 py-3">النتيجة</th>
+                  <th className="px-4 py-3">المتابعة</th>
                   <th className="px-4 py-3">التقرير</th>
                   {canEdit && <th className="px-4 py-3">الإجراءات</th>}
                 </tr>
@@ -758,6 +780,20 @@ export default function TestsPage() {
                             }
                             tone={resultTone(t.result)}
                           />
+                        )}
+                      </td>
+
+                      <td className="px-4 py-3">
+                        {openFollowUpTestIds.has(t.id) ? (
+                          <span className="inline-flex rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
+                            يحتاج متابعة
+                          </span>
+                        ) : t.result === 'passed' ? (
+                          <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
+                            مغلق
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">—</span>
                         )}
                       </td>
 
