@@ -423,6 +423,10 @@ export default function FaultsPage() {
                 <th className="px-4 py-3">
                   تاريخ البلاغ
                 </th>
+
+                <th className="px-4 py-3">
+                  عمر العطل
+                </th>
               </tr>
             </thead>
 
@@ -484,6 +488,27 @@ export default function FaultsPage() {
                     ).toLocaleDateString(
                       'ar-SA'
                     )}
+                  </td>
+
+                  <td className="px-4 py-3 font-medium text-gray-600">
+                    {f.status === 'closed' || f.status === 'resolved'
+                      ? '—'
+                      : (() => {
+                          const reported = new Date(f.reported_at);
+                          const now = new Date();
+                          const days = Math.max(
+                            0,
+                            Math.floor(
+                              (now.getTime() - reported.getTime()) /
+                                86400000
+                            )
+                          );
+                          return days === 0
+                            ? 'اليوم'
+                            : days === 1
+                              ? 'يوم واحد'
+                              : `${days} أيام`;
+                        })()}
                   </td>
                 </tr>
               ))}
